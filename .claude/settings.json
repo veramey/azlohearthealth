@@ -1,0 +1,32 @@
+{
+  "skills": [
+    {
+      "name": "business-analyst",
+      "path": ".claude/skills/business-analyst.md"
+    },
+    {
+      "name": "solution-architect",
+      "path": ".claude/skills/solution-architect.md"
+    },
+    {
+      "name": "designer",
+      "path": ".claude/skills/designer.md"
+    },
+    {
+      "name": "developer",
+      "path": ".claude/skills/developer.md"
+    },
+    {
+      "name": "qa",
+      "path": ".claude/skills/qa.md"
+    },
+    {
+      "name": "scrum-master",
+      "path": ".claude/skills/scrum-master.md"
+    },
+    {
+      "name": "refine",
+      "path": ".claude/skills/refine.md"
+    }
+  ]
+}

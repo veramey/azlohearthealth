@@ -1,0 +1,216 @@
+name: Orchestrator
+
+run-name: "Orchestrator : label '${{ github.event.label.name }}' on #${{ github.event.issue.number }}"
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to re-evaluate'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    # Only process pipeline-flow labels
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(fromJSON('["needs-clarification","pipeline-error","blocked","retry-1","retry-2"]'), github.event.label.name)
+    concurrency:
+      group: orchestrator-${{ github.event.issue.number || inputs.issue_number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Resolve issue number
+        id: issue
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Orchestrator Started"
+          echo "Issue: #${{ steps.issue.outputs.number }}"
+          echo "Label: ${{ github.event.label.name }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Handle needs-clarification (rollback)
+        if: github.event.label.name == 'needs-clarification'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          ISSUE="${{ steps.issue.outputs.number }}"
+          REPO="${{ github.repository }}"
+
+          echo "Rolling back issue #$ISSUE — needs clarification"
+
+          # Determine current stage and roll back
+          LABELS=$(gh issue view $ISSUE --repo $REPO --json labels --jq '[.labels[].name] | join(",")')
+
+          if echo "$LABELS" | grep -q "design-done"; then
+            gh issue edit $ISSUE --repo $REPO --remove-label "design-done" 2>/dev/null || true
+            echo "Rolled back from design-done"
+          fi
+
+          if echo "$LABELS" | grep -q "refined"; then
+            gh issue edit $ISSUE --repo $REPO --remove-label "refined" 2>/dev/null || true
+            echo "Rolled back from refined"
+          fi
+
+          # Move back on board
+          chmod +x scripts/update-project-status.sh 2>/dev/null || true
+          ./scripts/update-project-status.sh "$ISSUE" "Backlog" 2>/dev/null || true
+
+          gh issue comment $ISSUE --repo $REPO \
+            --body "**Orchestrator: Rolled back** — issue needs clarification before proceeding.
+
+          The pipeline has paused this issue. Please address the questions raised by the architect/designer, then remove the \`needs-clarification\` label to resume.
+
+          _Orchestrator Agent_"
+
+      - name: Handle pipeline-error (retry or escalate)
+        if: github.event.label.name == 'pipeline-error'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          ISSUE="${{ steps.issue.outputs.number }}"
+          REPO="${{ github.repository }}"
+
+          LABELS=$(gh issue view $ISSUE --repo $REPO --json labels --jq '[.labels[].name] | join(",")')
+
+          if echo "$LABELS" | grep -q "retry-2"; then
+            # Max retries exhausted — escalate
+            gh label create "blocked" --color "d73a4a" --description "Blocked — needs human intervention" \
+              --repo $REPO 2>/dev/null || true
+            gh issue edit $ISSUE --repo $REPO --add-label "blocked"
+            gh issue edit $ISSUE --repo $REPO --remove-label "pipeline-error,retry-1,retry-2" 2>/dev/null || true
+
+            # Fix #10: Extract last failed workflow logs for diagnostic
+            LAST_FAILED_RUN=$(gh run list --repo $REPO --limit 20 \
+              --json databaseId,displayTitle,conclusion,url \
+              --jq "[.[] | select(.displayTitle | contains(\"#$ISSUE\")) | select(.conclusion == \"failure\")] | .[0]" 2>/dev/null || echo "{}")
+
+            RUN_URL=$(echo "$LAST_FAILED_RUN" | jq -r '.url // "N/A"')
+            RUN_ID=$(echo "$LAST_FAILED_RUN" | jq -r '.databaseId // ""')
+
+            LOG_EXCERPT=""
+            if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+              LOG_EXCERPT=$(gh run view $RUN_ID --repo $REPO --log-failed 2>/dev/null | tail -30 || echo "Could not fetch logs")
+            fi
+
+            gh issue comment $ISSUE --repo $REPO \
+              --body "**Orchestrator: BLOCKED** — max retries exhausted (2 attempts).
+
+          The automated pipeline failed twice for this issue. Human intervention required.
+
+          ### Last failed run
+          $RUN_URL
+
+          ### Log excerpt (last 30 lines)
+          \`\`\`
+          $LOG_EXCERPT
+          \`\`\`
+
+          _Orchestrator Agent_"
+
+          elif echo "$LABELS" | grep -q "retry-1"; then
+            # Second retry
+            gh label create "retry-2" --color "fbca04" --description "Second retry attempt" \
+              --repo $REPO 2>/dev/null || true
+            gh issue edit $ISSUE --repo $REPO \
+              --remove-label "pipeline-error,retry-1" \
+              --add-label "retry-2" 2>/dev/null || true
+
+            # Re-trigger by finding the last active stage label and re-adding it
+            STAGE=""
+            if echo "$LABELS" | grep -q "tests-ready"; then STAGE="tests-ready"
+            elif echo "$LABELS" | grep -q "design-done"; then STAGE="design-done"
+            elif echo "$LABELS" | grep -q "refined"; then STAGE="refined"
+            elif echo "$LABELS" | grep -q "intake-done"; then STAGE="intake-done"
+            elif echo "$LABELS" | grep -q "ready"; then STAGE="ready"
+            fi
+
+            if [ -n "$STAGE" ]; then
+              gh issue edit $ISSUE --repo $REPO --remove-label "$STAGE" 2>/dev/null || true
+              sleep 3
+              gh issue edit $ISSUE --repo $REPO --add-label "$STAGE"
+              gh issue comment $ISSUE --repo $REPO \
+                --body "**Orchestrator: Retry 2/2** — re-triggering \`$STAGE\` stage.
+
+          _Orchestrator Agent_"
+            fi
+
+          else
+            # First retry
+            gh label create "retry-1" --color "fbca04" --description "First retry attempt" \
+              --repo $REPO 2>/dev/null || true
+            gh issue edit $ISSUE --repo $REPO \
+              --remove-label "pipeline-error" \
+              --add-label "retry-1" 2>/dev/null || true
+
+            STAGE=""
+            if echo "$LABELS" | grep -q "tests-ready"; then STAGE="tests-ready"
+            elif echo "$LABELS" | grep -q "design-done"; then STAGE="design-done"
+            elif echo "$LABELS" | grep -q "refined"; then STAGE="refined"
+            elif echo "$LABELS" | grep -q "intake-done"; then STAGE="intake-done"
+            elif echo "$LABELS" | grep -q "ready"; then STAGE="ready"
+            fi
+
+            if [ -n "$STAGE" ]; then
+              gh issue edit $ISSUE --repo $REPO --remove-label "$STAGE" 2>/dev/null || true
+              sleep 3
+              gh issue edit $ISSUE --repo $REPO --add-label "$STAGE"
+              gh issue comment $ISSUE --repo $REPO \
+                --body "**Orchestrator: Retry 1/2** — re-triggering \`$STAGE\` stage.
+
+          _Orchestrator Agent_"
+            fi
+          fi
+
+      - name: Handle blocked (report)
+        if: github.event.label.name == 'blocked'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          ISSUE="${{ steps.issue.outputs.number }}"
+          REPO="${{ github.repository }}"
+
+          # Collect diagnostic info
+          LABELS=$(gh issue view $ISSUE --repo $REPO --json labels --jq '[.labels[].name] | join(", ")')
+          COMMENTS=$(gh issue view $ISSUE --repo $REPO --json comments --jq '.comments[-3:] | .[] | "[\(.author.login)]: \(.body[:200])"')
+
+          # Find related workflow runs
+          RUNS=$(gh run list --repo $REPO --limit 10 \
+            --json displayTitle,conclusion,createdAt,url \
+            --jq ".[] | select(.displayTitle | contains(\"#$ISSUE\")) | \"\(.conclusion): \(.displayTitle) (\(.createdAt))\"")
+
+          gh issue comment $ISSUE --repo $REPO \
+            --body "**Orchestrator: BLOCKED — Diagnostic Report**
+
+          ### Current Labels
+          $LABELS
+
+          ### Recent Comments
+          $COMMENTS
+
+          ### Related Workflow Runs
+          \`\`\`
+          $RUNS
+          \`\`\`
+
+          This issue requires human intervention. Please review the logs and either fix the issue or adjust the requirements.
+
+          To resume: remove the \`blocked\` label after fixing the root cause.
+
+          _Orchestrator Agent_"

@@ -1,0 +1,110 @@
+name: Design Refinement
+
+run-name: "Design #${{ github.event.issue.number }} : design requirements"
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    # Fix #12: Also trigger when needs-design is added after refined
+    if: |
+      (
+        github.event.label.name == 'refined' &&
+        contains(github.event.issue.labels.*.name, 'needs-design') &&
+        !contains(github.event.issue.labels.*.name, 'design-done') &&
+        !contains(github.event.issue.labels.*.name, 'sub-issue')
+      ) ||
+      (
+        github.event.label.name == 'needs-design' &&
+        contains(github.event.issue.labels.*.name, 'refined') &&
+        !contains(github.event.issue.labels.*.name, 'design-done') &&
+        !contains(github.event.issue.labels.*.name, 'sub-issue')
+      )
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Design Refinement (Designer) Started"
+          echo "Issue: #${{ github.event.issue.number }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Write issue to file
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            > input/issue.md
+
+      - name: Run Claude — design requirements
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          DESIGN=$(cat .claude/agents/common/design-system.md)
+          AGENT_PROMPT=$(cat .claude/agents/designer.md)
+          claude --dangerously-skip-permissions --model claude-opus-4-6 -p "
+          # Design System
+          $DESIGN
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read input/issue.md and SPEC.md (UI sections).
+          Output to output/design.md (will be APPENDED to the existing issue body).
+          "
+
+      - name: Append design and label
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          # Fix #8: Silent failure — flag if Claude produced no output
+          if [ ! -f output/design.md ] || [ ! -s output/design.md ]; then
+            echo "Claude produced no output — adding pipeline-error"
+            gh label create "pipeline-error" --color "d73a4a" --description "Workflow failure" \
+              --repo ${{ github.repository }} 2>/dev/null || true
+            gh issue edit ${{ github.event.issue.number }} \
+              --repo ${{ github.repository }} \
+              --add-label "pipeline-error"
+            exit 1
+          fi
+
+          CURRENT_BODY=$(gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} --json body -q '.body')
+
+          printf '%s\n\n%s\n\n---\n_Design by Designer Agent (Claude Code)_' \
+            "$CURRENT_BODY" "$(cat output/design.md)" > output/new_body.txt
+
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body-file output/new_body.txt
+
+          gh label create "design-done" --color "bfd4f2" --description "Design requirements added" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "design-done"
+
+          # Move on project board
+          chmod +x scripts/update-project-status.sh
+          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Design" || true
+
+          echo "Design requirements added and labeled design-done"

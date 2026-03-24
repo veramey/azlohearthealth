@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azlo Dark Factory — Autonomous CI/CD Pipeline</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1e1e1e;
+      --border: #2a2a2a;
+      --text: #e5e5e5;
+      --text-muted: #888;
+      --accent: #22C55E;
+      --yellow: #EAB308;
+      --red: #EF4444;
+      --blue: #3B82F6;
+      --purple: #A855F7;
+      --orange: #F97316;
+      --cyan: #06B6D4;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 0;
+    }
+
+    .header {
+      text-align: center;
+      padding: 80px 24px 60px;
+      background: linear-gradient(180deg, #0f1a0f 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 24px;
+    }
+    .header h1 { font-size: 48px; font-weight: 700; letter-spacing: -1px; margin-bottom: 16px; }
+    .header h1 span { color: var(--accent); }
+    .header p { font-size: 18px; color: var(--text-muted); max-width: 600px; margin: 0 auto; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    .section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+    .section:last-child { border-bottom: none; }
+    .section-title { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+    .section-subtitle { font-size: 15px; color: var(--text-muted); margin-bottom: 40px; }
+
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 40px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; text-align: center; }
+    .stat-number { font-size: 36px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .pipeline { display: flex; flex-direction: column; gap: 0; }
+    .pipeline-stage {
+      display: grid; grid-template-columns: 180px 1fr 120px;
+      align-items: center; gap: 20px; padding: 18px 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 8px; transition: border-color 0.2s;
+    }
+    .pipeline-stage:hover { border-color: #444; }
+    .stage-number {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; margin-right: 12px;
+    }
+    .stage-left { display: flex; align-items: center; }
+    .stage-name { font-weight: 600; font-size: 15px; }
+    .stage-desc { font-size: 14px; color: var(--text-muted); }
+    .stage-agent { font-size: 12px; color: #666; margin-top: 2px; }
+    .stage-agent code { color: var(--cyan); background: rgba(6,182,212,0.1); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+    .stage-model { text-align: right; font-size: 12px; padding: 4px 10px; border-radius: 6px; display: inline-block; font-weight: 600; }
+    .model-opus { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+    .model-sonnet { background: rgba(59,130,246,0.15); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+    .model-ci { background: rgba(136,136,136,0.15); color: var(--text-muted); border: 1px solid rgba(136,136,136,0.3); }
+
+    .dot-green { background: var(--accent); color: #000; }
+    .dot-purple { background: var(--purple); color: #fff; }
+    .dot-blue { background: var(--blue); color: #fff; }
+    .dot-yellow { background: var(--yellow); color: #000; }
+    .dot-cyan { background: var(--cyan); color: #000; }
+    .dot-red { background: var(--red); color: #fff; }
+    .dot-orange { background: var(--orange); color: #000; }
+    .dot-muted { background: #444; color: #fff; }
+
+    .arch-diagram {
+      display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr;
+      align-items: center; gap: 0; margin-bottom: 40px;
+    }
+    .arch-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; text-align: center;
+    }
+    .arch-box h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+    .arch-box p { font-size: 13px; color: var(--text-muted); }
+    .arch-box .count { font-size: 28px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .arch-arrow { text-align: center; color: var(--text-muted); font-size: 20px; }
+
+    .roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .role-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; }
+    .role-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px; }
+    .role-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .role-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+    .role-files { margin-top: 12px; font-size: 12px; color: #555; }
+    .role-files code { color: var(--cyan); background: rgba(6,182,212,0.1); padding: 1px 5px; border-radius: 3px; }
+    .role-model-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-top: 12px; }
+
+    .failure-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .failure-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .failure-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .failure-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+    .failure-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    .labels-group { margin-bottom: 24px; }
+    .labels-group h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .labels-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .label-tag { padding: 4px 12px; border-radius: 16px; font-size: 13px; font-weight: 500; border: 1px solid; }
+    .label-green { background: rgba(34,197,94,0.12); color: var(--accent); border-color: rgba(34,197,94,0.3); }
+    .label-yellow { background: rgba(234,179,8,0.12); color: var(--yellow); border-color: rgba(234,179,8,0.3); }
+    .label-red { background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.3); }
+    .label-blue { background: rgba(59,130,246,0.12); color: var(--blue); border-color: rgba(59,130,246,0.3); }
+    .label-purple { background: rgba(168,85,247,0.12); color: var(--purple); border-color: rgba(168,85,247,0.3); }
+    .label-muted { background: rgba(136,136,136,0.12); color: var(--text-muted); border-color: rgba(136,136,136,0.3); }
+
+    .board { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .board-col { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 500; text-align: center; flex: 1; min-width: 120px; }
+    .board-arrow { color: var(--text-muted); font-size: 18px; }
+
+    .skills-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .skill-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .skill-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; font-family: 'SF Mono', monospace; color: var(--accent); }
+    .skill-card p { font-size: 13px; color: var(--text-muted); }
+    .skill-card .skill-agents { margin-top: 8px; font-size: 12px; color: #555; }
+    .skill-card .skill-agents code { color: var(--cyan); background: rgba(6,182,212,0.1); padding: 1px 5px; border-radius: 3px; }
+
+    .file-tree { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; line-height: 2; overflow-x: auto; }
+    .file-tree .dir { color: var(--blue); }
+    .file-tree .file { color: var(--text-muted); }
+    .file-tree .comment { color: #555; }
+    .file-tree .common { color: var(--cyan); }
+
+    .checklist { list-style: none; }
+    .checklist li { display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--border); font-size: 15px; }
+    .checklist li:last-child { border-bottom: none; }
+    .check-num { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
+    .check-text code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent); }
+
+    .safeguard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .safeguard-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .safeguard-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .safeguard-card p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+    @media (max-width: 768px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .roles-grid, .safeguard-grid { grid-template-columns: 1fr; }
+      .failure-grid, .skills-grid { grid-template-columns: 1fr; }
+      .pipeline-stage { grid-template-columns: 1fr; gap: 8px; }
+      .stage-model { text-align: left; }
+      .header h1 { font-size: 32px; }
+      .board { flex-direction: column; }
+      .board-arrow { transform: rotate(90deg); }
+      .arch-diagram { grid-template-columns: 1fr; }
+      .arch-arrow { transform: rotate(90deg); padding: 8px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">Autonomous CI/CD</div>
+    <h1>Azlo <span>Dark Factory</span></h1>
+    <p>Fully automated development pipeline. Open an issue — get merged code. Manual override via CLI when needed.</p>
+
+    <div class="container">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number">14</div>
+          <div class="stat-label">GitHub Workflows</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">10</div>
+          <div class="stat-label">AI Agents</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">3</div>
+          <div class="stat-label">Shared Context Files</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">7</div>
+          <div class="stat-label">CLI Skills</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">2x</div>
+          <div class="stat-label">Auto-Retry</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Architecture -->
+    <div class="section">
+      <h2 class="section-title">Modular Agent Architecture</h2>
+      <p class="section-subtitle">Single source of truth — common context shared across all agents, consumed by both workflows and CLI skills</p>
+
+      <div class="arch-diagram">
+        <div class="arch-box">
+          <div class="count">3</div>
+          <h3>Common Context</h3>
+          <p>project-context.md<br>design-system.md<br>quality-rules.md</p>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box">
+          <div class="count">10</div>
+          <h3>Agent Prompts</h3>
+          <p>Role + Output format<br>Rules + Few-shot examples<br>References common/ files</p>
+        </div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box" style="border-color: var(--border);">
+          <div class="count" style="font-size: 20px; color: var(--text-muted);">14 + 7</div>
+          <h3>Consumers</h3>
+          <p>14 GitHub Workflows<br>(automated pipeline)<br>7 CLI Skills<br>(manual override)</p>
+        </div>
+      </div>
+
+      <p style="font-size: 14px; color: var(--text-muted); text-align: center;">Change a color in <code style="color: var(--cyan);">common/design-system.md</code> &rarr; every agent updates. One edit, not ten.</p>
+    </div>
+
+    <!-- Pipeline Flow -->
+    <div class="section">
+      <h2 class="section-title">Pipeline Flow</h2>
+      <p class="section-subtitle">From raw idea to merged code — every step is automated</p>
+
+      <div class="pipeline">
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-green">1</div>
+            <div>
+              <div class="stage-name">Intake Agent</div>
+              <div class="stage-agent"><code>intake.md</code> + project-context</div>
+            </div>
+          </div>
+          <div class="stage-desc">Issue opened &rarr; structures into AC, priority, design flag</div>
+          <div><span class="stage-model model-opus">Opus</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-purple">2</div>
+            <div>
+              <div class="stage-name">Story Refinement</div>
+              <div class="stage-agent"><code>architect.md</code> + project-context + quality-rules</div>
+            </div>
+          </div>
+          <div class="stage-desc">Solution Architect adds technical approach, files, data flow</div>
+          <div><span class="stage-model model-opus">Opus</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-purple">3</div>
+            <div>
+              <div class="stage-name">Design Refinement</div>
+              <div class="stage-agent"><code>designer.md</code> + design-system</div>
+            </div>
+          </div>
+          <div class="stage-desc">Designer adds layout, states, visual specs (if <code>needs-design</code>)</div>
+          <div><span class="stage-model model-opus">Opus</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-green">4</div>
+            <div>
+              <div class="stage-name">Issue Breakdown</div>
+              <div class="stage-agent"><code>breakdown.md</code> + project-context</div>
+            </div>
+          </div>
+          <div class="stage-desc">Splits into 2&ndash;5 implementable sub-issues with AC</div>
+          <div><span class="stage-model model-opus">Opus</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-cyan">5</div>
+            <div>
+              <div class="stage-name">Test Cases</div>
+              <div class="stage-agent"><code>test-cases.md</code> + project-context + quality-rules</div>
+            </div>
+          </div>
+          <div class="stage-desc">QA generates Jest + RTL test cases with few-shot examples</div>
+          <div><span class="stage-model model-sonnet">Sonnet</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-blue">6</div>
+            <div>
+              <div class="stage-name">AI Teammate</div>
+              <div class="stage-agent"><code>developer.md</code> + all 3 common files</div>
+            </div>
+          </div>
+          <div class="stage-desc">Developer implements feature, writes tests, creates PR</div>
+          <div><span class="stage-model model-sonnet">Sonnet</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-yellow">7</div>
+            <div>
+              <div class="stage-name">Bug Check</div>
+              <div class="stage-agent"><code>code-reviewer.md</code> + design-system + quality-rules</div>
+            </div>
+          </div>
+          <div class="stage-desc">Code review + <code>npm test</code> + <code>tsc --noEmit</code> (pipefail-safe)</div>
+          <div><span class="stage-model model-sonnet">Sonnet</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-orange">8</div>
+            <div>
+              <div class="stage-name">PR Rework</div>
+              <div class="stage-agent"><code>rework.md</code> + project-context + quality-rules</div>
+            </div>
+          </div>
+          <div class="stage-desc">Auto-fixes review issues (max 3 Bug Check failures &rarr; blocked)</div>
+          <div><span class="stage-model model-sonnet">Sonnet</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-muted">9</div>
+            <div>
+              <div class="stage-name">Unit Tests</div>
+            </div>
+          </div>
+          <div class="stage-desc">Final CI gate: Jest + TypeScript strict check</div>
+          <div><span class="stage-model model-ci">CI</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-muted">10</div>
+            <div>
+              <div class="stage-name">Merge Trigger</div>
+            </div>
+          </div>
+          <div class="stage-desc">Squash merge to main, delete branch, close issue</div>
+          <div><span class="stage-model model-ci">CI</span></div>
+        </div>
+
+        <div class="pipeline-stage">
+          <div class="stage-left">
+            <div class="stage-number dot-green">11</div>
+            <div>
+              <div class="stage-name">Close Parent</div>
+              <div class="stage-agent"><code>qa-verifier.md</code> + project-context</div>
+            </div>
+          </div>
+          <div class="stage-desc">Verifies all AC met via merge-commit diffs &rarr; closes parent</div>
+          <div><span class="stage-model model-sonnet">Sonnet</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Roles -->
+    <div class="section">
+      <h2 class="section-title">Agent Roles</h2>
+      <p class="section-subtitle">10 specialized agents, each with structured prompts: Role &rarr; Context &rarr; Output format &rarr; Rules &rarr; Examples</p>
+
+      <div class="roles-grid">
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(34,197,94,0.15);">&#x1f4cb;</div>
+          <h3>Business Analyst</h3>
+          <p>Structures raw issues into AC + priority + design flag. Breaks features into sub-tasks with few-shot JSON examples.</p>
+          <div class="role-files"><code>intake.md</code> <code>breakdown.md</code></div>
+          <span class="role-model-tag model-opus">Opus</span>
+        </div>
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(168,85,247,0.15);">&#x1f3d7;</div>
+          <h3>Solution Architect</h3>
+          <p>Designs technical approach &mdash; files to create, data flow, component breakdown, testing strategy.</p>
+          <div class="role-files"><code>architect.md</code></div>
+          <span class="role-model-tag model-opus">Opus</span>
+        </div>
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(168,85,247,0.15);">&#x1f3a8;</div>
+          <h3>Designer</h3>
+          <p>Creates design requirements with ASCII mockups &mdash; layout, states, visual specs, accessibility.</p>
+          <div class="role-files"><code>designer.md</code></div>
+          <span class="role-model-tag model-opus">Opus</span>
+        </div>
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(59,130,246,0.15);">&#x1f4bb;</div>
+          <h3>Developer</h3>
+          <p>Implements features following architecture + design. Writes code, Jest tests. Serialized execution prevents merge conflicts.</p>
+          <div class="role-files"><code>developer.md</code> <code>rework.md</code></div>
+          <span class="role-model-tag model-sonnet">Sonnet</span>
+        </div>
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(6,182,212,0.15);">&#x1f50d;</div>
+          <h3>QA Engineer</h3>
+          <p>Generates test cases with mocking strategy. Reviews code with APPROVE/NEEDS_FIX. Verifies parent AC on close.</p>
+          <div class="role-files"><code>test-cases.md</code> <code>code-reviewer.md</code> <code>qa-verifier.md</code></div>
+          <span class="role-model-tag model-sonnet">Sonnet</span>
+        </div>
+        <div class="role-card">
+          <div class="role-icon" style="background: rgba(249,115,22,0.15);">&#x1f6e1;</div>
+          <h3>Orchestrator + Monitor</h3>
+          <p>Retries (2x), rollbacks, escalation. Monitor detects 11 stuck states every 15 min with early-exit when pipeline empty.</p>
+          <div class="role-files"><code>pipeline-monitor.md</code></div>
+          <span class="role-model-tag model-ci">System + Sonnet</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLI Skills -->
+    <div class="section">
+      <h2 class="section-title">Manual Override (CLI Skills)</h2>
+      <p class="section-subtitle">Dark Factory handles 95% automatically. Skills let you intervene for the other 5%.</p>
+
+      <div class="skills-grid">
+        <div class="skill-card">
+          <h3>/business-analyst</h3>
+          <p>Structure an issue or break it into sub-tasks manually</p>
+          <div class="skill-agents">Agents: <code>intake.md</code> <code>breakdown.md</code> &middot; Model: Opus</div>
+        </div>
+        <div class="skill-card">
+          <h3>/solution-architect &lt;#&gt;</h3>
+          <p>Add architecture solution to a specific issue</p>
+          <div class="skill-agents">Agent: <code>architect.md</code> &middot; Model: Opus</div>
+        </div>
+        <div class="skill-card">
+          <h3>/designer &lt;#&gt;</h3>
+          <p>Add design requirements to an issue</p>
+          <div class="skill-agents">Agent: <code>designer.md</code> &middot; Model: Opus</div>
+        </div>
+        <div class="skill-card">
+          <h3>/developer &lt;#&gt;</h3>
+          <p>Implement a feature locally in isolated worktree</p>
+          <div class="skill-agents">Agent: <code>developer.md</code> &middot; Model: Sonnet &middot; Worktree isolation</div>
+        </div>
+        <div class="skill-card">
+          <h3>/qa &lt;#&gt;</h3>
+          <p>Generate tests, review code, or verify parent AC</p>
+          <div class="skill-agents">Agents: <code>code-reviewer.md</code> <code>test-cases.md</code> <code>qa-verifier.md</code> &middot; Model: Sonnet</div>
+        </div>
+        <div class="skill-card">
+          <h3>/refine &lt;#&gt;</h3>
+          <p>Run architect + designer in parallel for an issue</p>
+          <div class="skill-agents">Agents: <code>architect.md</code> + <code>designer.md</code> &middot; Parallel &middot; Model: Opus</div>
+        </div>
+        <div class="skill-card" style="grid-column: span 2;">
+          <h3>/scrum-master</h3>
+          <p>Interactive dialog: board status, prioritize backlog, find blockers, move issues between statuses</p>
+          <div class="skill-agents">Dialog skill (no agent) &middot; Runs in main context</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Self-Healing -->
+    <div class="section">
+      <h2 class="section-title">Self-Healing Pipeline</h2>
+      <p class="section-subtitle">Every failure path has an automated recovery mechanism</p>
+
+      <div class="failure-grid">
+        <div class="failure-card">
+          <h3><span class="failure-dot" style="background: var(--red);"></span> Workflow Failure</h3>
+          <p>Failure Reporter catches it &rarr; adds <code>pipeline-error</code> &rarr; Orchestrator retries 2x &rarr; if still failing, marks <code>blocked</code> with failed log excerpt.</p>
+        </div>
+        <div class="failure-card">
+          <h3><span class="failure-dot" style="background: var(--yellow);"></span> Needs Clarification</h3>
+          <p>Architect or Designer has questions &rarr; <code>needs-clarification</code> &rarr; Orchestrator rolls back labels (including <code>design-done</code>) &rarr; human answers &rarr; pipeline resumes.</p>
+        </div>
+        <div class="failure-card">
+          <h3><span class="failure-dot" style="background: var(--orange);"></span> PR Rework Exhausted</h3>
+          <p>Bug Check rejects &rarr; PR Rework fixes. Counter based on Bug Check failure comments (not label events). After 3 &rarr; <code>blocked</code>.</p>
+        </div>
+        <div class="failure-card">
+          <h3><span class="failure-dot" style="background: var(--cyan);"></span> Stuck Items (11 patterns)</h3>
+          <p>Pipeline Monitor runs every 15 min (skips when empty). Detects all stuck states: intake-done, refined, design-done, ready, tests-ready, rework, merge, and more.</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 32px;">
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Built-in Safeguards</h3>
+        <div class="safeguard-grid">
+          <div class="safeguard-card">
+            <h3>Race Condition Guard</h3>
+            <p>Issue Breakdown verifies labels via API (not event payload) before running. Prevents dual-trigger with Design Refinement.</p>
+          </div>
+          <div class="safeguard-card">
+            <h3>Dedup Protection</h3>
+            <p>Checks existing sub-issues before creating new ones. Prevents duplicate sub-issues on re-trigger.</p>
+          </div>
+          <div class="safeguard-card">
+            <h3>JSON Validation</h3>
+            <p>Breakdown output stripped of markdown fences, validated as JSON array. Invalid output &rarr; pipeline-error, not silent failure.</p>
+          </div>
+          <div class="safeguard-card">
+            <h3>Silent Failure Detection</h3>
+            <p>Every Claude-invoking workflow checks output exists and is non-empty. Missing output &rarr; pipeline-error label.</p>
+          </div>
+          <div class="safeguard-card">
+            <h3>Force-Push Guard</h3>
+            <p>AI Teammate checks for existing PR before creating branch. Prevents overwriting PR Rework commits on re-trigger.</p>
+          </div>
+          <div class="safeguard-card">
+            <h3>Cascade Serialization</h3>
+            <p>Test Cases and AI Teammate use shared concurrency groups. Sub-issues process one at a time, preventing merge conflicts.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Labels -->
+    <div class="section">
+      <h2 class="section-title">Label System</h2>
+      <p class="section-subtitle">Labels drive the entire state machine</p>
+
+      <div class="labels-group">
+        <h3>Flow</h3>
+        <div class="labels-row">
+          <span class="label-tag label-green">intake-done</span>
+          <span class="label-tag label-green">refined</span>
+          <span class="label-tag label-green">design-done</span>
+          <span class="label-tag label-green">ready</span>
+          <span class="label-tag label-green">tests-ready</span>
+          <span class="label-tag label-green">pr_approved</span>
+        </div>
+      </div>
+      <div class="labels-group">
+        <h3>Priority</h3>
+        <div class="labels-row">
+          <span class="label-tag label-red">P0-critical</span>
+          <span class="label-tag label-yellow">P1-high</span>
+          <span class="label-tag label-blue">P2-medium</span>
+          <span class="label-tag label-muted">P3-low</span>
+        </div>
+      </div>
+      <div class="labels-group">
+        <h3>Problems</h3>
+        <div class="labels-row">
+          <span class="label-tag label-purple">needs-design</span>
+          <span class="label-tag label-yellow">needs-clarification</span>
+          <span class="label-tag label-yellow">needs-rework</span>
+          <span class="label-tag label-red">blocked</span>
+          <span class="label-tag label-red">pipeline-error</span>
+          <span class="label-tag label-yellow">retry-1</span>
+          <span class="label-tag label-yellow">retry-2</span>
+        </div>
+      </div>
+      <div class="labels-group">
+        <h3>Type</h3>
+        <div class="labels-row">
+          <span class="label-tag label-blue">feature</span>
+          <span class="label-tag label-blue">sub-issue</span>
+          <span class="label-tag label-muted">tech-debt</span>
+          <span class="label-tag label-red">bug</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="section">
+      <h2 class="section-title">Project Board</h2>
+      <p class="section-subtitle">GitHub Projects V2 with automated status transitions</p>
+
+      <div class="board">
+        <div class="board-col">Backlog</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">Ready for<br>Architecture</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">Ready for<br>Design</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">Ready for<br>Development</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">In<br>Development</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">Ready for<br>QA</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col">In QA</div>
+        <span class="board-arrow">&rarr;</span>
+        <div class="board-col" style="border-color: var(--accent);">Done</div>
+      </div>
+    </div>
+
+    <!-- File Structure -->
+    <div class="section">
+      <h2 class="section-title">File Structure</h2>
+      <p class="section-subtitle">32 files powering the Dark Factory</p>
+
+      <div class="file-tree">
+        <span class="dir">.github/workflows/</span> <span class="comment">── 14 GitHub Actions workflows</span><br>
+        &nbsp;&nbsp;<span class="file">intake.yml</span> <span class="comment">── issue opened &rarr; structure</span><br>
+        &nbsp;&nbsp;<span class="file">story-refinement.yml</span> <span class="comment">── intake-done &rarr; architecture</span><br>
+        &nbsp;&nbsp;<span class="file">design-refinement.yml</span> <span class="comment">── refined + needs-design &rarr; design</span><br>
+        &nbsp;&nbsp;<span class="file">issue-breakdown.yml</span> <span class="comment">── refined/design-done &rarr; sub-issues</span><br>
+        &nbsp;&nbsp;<span class="file">test-cases.yml</span> <span class="comment">── ready &rarr; Jest test cases</span><br>
+        &nbsp;&nbsp;<span class="file">ai-teammate.yml</span> <span class="comment">── tests-ready &rarr; implement + PR</span><br>
+        &nbsp;&nbsp;<span class="file">bug-check.yml</span> <span class="comment">── PR open &rarr; review + test + tsc</span><br>
+        &nbsp;&nbsp;<span class="file">pr-rework.yml</span> <span class="comment">── needs-rework &rarr; fix (max 3x)</span><br>
+        &nbsp;&nbsp;<span class="file">unit-tests.yml</span> <span class="comment">── pr_approved &rarr; final CI gate</span><br>
+        &nbsp;&nbsp;<span class="file">merge-trigger.yml</span> <span class="comment">── tests pass &rarr; squash merge</span><br>
+        &nbsp;&nbsp;<span class="file">close-parent-issue.yml</span> <span class="comment">── sub-issue closed &rarr; verify parent</span><br>
+        &nbsp;&nbsp;<span class="file">orchestrator.yml</span> <span class="comment">── retry, rollback, escalation</span><br>
+        &nbsp;&nbsp;<span class="file">pipeline-monitor.yml</span> <span class="comment">── cron 15min &rarr; unstick items</span><br>
+        &nbsp;&nbsp;<span class="file">workflow-failure-reporter.yml</span> <span class="comment">── any failure &rarr; comment + retry</span><br>
+        <br>
+        <span class="dir">scripts/</span> <span class="comment">── 2 helper scripts</span><br>
+        &nbsp;&nbsp;<span class="file">add-to-project.sh</span> <span class="comment">── Add issue to GitHub Project</span><br>
+        &nbsp;&nbsp;<span class="file">update-project-status.sh</span> <span class="comment">── Move issue between statuses</span><br>
+        <br>
+        <span class="dir">.claude/agents/</span> <span class="comment">── 10 agent prompts (single source of truth)</span><br>
+        &nbsp;&nbsp;<span class="common">common/</span> <span class="comment">── 3 shared context files</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="common">project-context.md</span> <span class="comment">── stack, structure, constraints</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="common">design-system.md</span> <span class="comment">── colors, typography, components</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="common">quality-rules.md</span> <span class="comment">── TypeScript, HealthKit, UI rules</span><br>
+        &nbsp;&nbsp;<span class="file">intake.md</span> <span class="comment">── BA: structure raw issue</span><br>
+        &nbsp;&nbsp;<span class="file">architect.md</span> <span class="comment">── SA: architecture solution</span><br>
+        &nbsp;&nbsp;<span class="file">designer.md</span> <span class="comment">── Designer: design requirements</span><br>
+        &nbsp;&nbsp;<span class="file">breakdown.md</span> <span class="comment">── BA: split into sub-issues</span><br>
+        &nbsp;&nbsp;<span class="file">test-cases.md</span> <span class="comment">── QA: generate test cases</span><br>
+        &nbsp;&nbsp;<span class="file">developer.md</span> <span class="comment">── Dev: implement feature</span><br>
+        &nbsp;&nbsp;<span class="file">code-reviewer.md</span> <span class="comment">── QA: review PR</span><br>
+        &nbsp;&nbsp;<span class="file">rework.md</span> <span class="comment">── Dev: fix review issues</span><br>
+        &nbsp;&nbsp;<span class="file">pipeline-monitor.md</span> <span class="comment">── Monitor: 11 stuck patterns</span><br>
+        &nbsp;&nbsp;<span class="file">qa-verifier.md</span> <span class="comment">── QA: verify parent AC</span><br>
+        <br>
+        <span class="dir">.claude/skills/</span> <span class="comment">── 7 CLI entry points (manual override)</span><br>
+        &nbsp;&nbsp;<span class="file">business-analyst.md</span> <span class="comment">── &rarr; intake.md / breakdown.md</span><br>
+        &nbsp;&nbsp;<span class="file">solution-architect.md</span> <span class="comment">── &rarr; architect.md</span><br>
+        &nbsp;&nbsp;<span class="file">designer.md</span> <span class="comment">── &rarr; designer.md</span><br>
+        &nbsp;&nbsp;<span class="file">developer.md</span> <span class="comment">── &rarr; developer.md / rework.md</span><br>
+        &nbsp;&nbsp;<span class="file">qa.md</span> <span class="comment">── &rarr; code-reviewer / test-cases / qa-verifier</span><br>
+        &nbsp;&nbsp;<span class="file">refine.md</span> <span class="comment">── &rarr; architect.md + designer.md parallel</span><br>
+        &nbsp;&nbsp;<span class="file">scrum-master.md</span> <span class="comment">── interactive dialog skill</span><br>
+      </div>
+    </div>
+
+    <!-- Setup -->
+    <div class="section">
+      <h2 class="section-title">Setup Checklist</h2>
+      <p class="section-subtitle">Everything needed to launch the Dark Factory</p>
+
+      <ul class="checklist">
+        <li>
+          <span class="check-num">1</span>
+          <span class="check-text">Create GitHub repository and push code</span>
+        </li>
+        <li>
+          <span class="check-num">2</span>
+          <span class="check-text">Add secrets: <code>PAT_TOKEN</code> (repo + project scope) and <code>CLAUDE_CODE_OAUTH_TOKEN</code></span>
+        </li>
+        <li>
+          <span class="check-num">3</span>
+          <span class="check-text">Create GitHub Project board <code>azlo</code> with statuses: Backlog, Ready for Architecture, Ready for Design, Ready for Development, In Development, Ready for QA, In QA, Done</span>
+        </li>
+        <li>
+          <span class="check-num">4</span>
+          <span class="check-text">Open your first issue &mdash; the pipeline handles everything from here</span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align: center; padding: 48px 24px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 13px;">
+    Azlo Dark Factory &middot; Powered by Claude Code (Opus + Sonnet) &middot; React Native + Expo + TypeScript
+  </div>
+
+</body>
+</html>

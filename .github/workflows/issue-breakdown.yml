@@ -1,0 +1,249 @@
+name: Issue Breakdown
+
+run-name: "Breakdown #${{ github.event.issue.number }} : create sub-issues"
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  breakdown:
+    runs-on: ubuntu-latest
+    # Fire on 'refined' (if no design needed) OR 'design-done' (after design completes)
+    if: |
+      (
+        github.event.label.name == 'refined' &&
+        !contains(github.event.issue.labels.*.name, 'needs-design') &&
+        !contains(github.event.issue.labels.*.name, 'sub-issue')
+      ) ||
+      (
+        github.event.label.name == 'design-done' &&
+        !contains(github.event.issue.labels.*.name, 'sub-issue')
+      )
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Issue Breakdown Started"
+          echo "Issue: #${{ github.event.issue.number }} — ${{ github.event.issue.title }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # Fix #1: Race condition — verify labels via API, not event payload
+      - name: Verify labels via API (race condition guard)
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          LABELS=$(gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --json labels --jq '[.labels[].name] | join(",")')
+
+          echo "Current labels: $LABELS"
+
+          # If needs-design but no design-done yet — design step hasn't run, exit
+          if echo "$LABELS" | grep -q "needs-design" && ! echo "$LABELS" | grep -q "design-done"; then
+            echo "needs-design present but design-done missing — waiting for Design Refinement"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "proceed=true" >> $GITHUB_OUTPUT
+
+      # Fix #9: Dedup — check if sub-issues already exist
+      - name: Check for existing sub-issues
+        if: steps.guard.outputs.proceed == 'true'
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label "sub-issue" \
+            --state all \
+            --json number,body \
+            --jq "[.[] | select(.body | test(\"Parent:\\\\s*#${{ github.event.issue.number }}\\\\b\"))] | length")
+
+          echo "Existing sub-issues for parent #${{ github.event.issue.number }}: $EXISTING"
+
+          if [ "$EXISTING" != "0" ]; then
+            echo "Sub-issues already exist — skipping breakdown"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          else
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Install Claude Code CLI
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Write issue to file
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            > input/issue.md
+          cat input/issue.md
+
+      - name: Run Claude — breakdown into sub-issues
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          CONTEXT=$(cat .claude/agents/common/project-context.md)
+          AGENT_PROMPT=$(cat .claude/agents/breakdown.md)
+          claude --dangerously-skip-permissions --model claude-opus-4-6 -p "
+          # Project Context
+          $CONTEXT
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read the GitHub issue in input/issue.md and SPEC.md.
+          Parent issue number: #${{ github.event.issue.number }}
+          Replace PARENT_NUMBER in the agent instructions with ${{ github.event.issue.number }}.
+          Output ONLY a valid JSON array to output/subtasks.json. No other output.
+          "
+
+      # Fix #8: Silent failure — if Claude produced no output, flag it
+      - name: Check Claude output exists
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ ! -f output/subtasks.json ] || [ ! -s output/subtasks.json ]; then
+            echo "Claude produced no output — adding pipeline-error"
+            gh label create "pipeline-error" --color "d73a4a" --description "Workflow failure" \
+              --repo ${{ github.repository }} 2>/dev/null || true
+            gh issue edit ${{ github.event.issue.number }} \
+              --repo ${{ github.repository }} \
+              --add-label "pipeline-error"
+            gh issue comment ${{ github.event.issue.number }} \
+              --repo ${{ github.repository }} \
+              --body "**Issue Breakdown: no output** — Claude did not produce subtasks.json. Orchestrator will retry.
+
+          _Issue Breakdown Agent_"
+            exit 1
+          fi
+
+      - name: Validate and clean JSON output
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true'
+        id: json_valid
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          # Strip markdown fences and extract JSON array
+          sed -i 's/^```json//; s/^```//' output/subtasks.json
+          node -e "
+            const fs = require('fs');
+            let raw = fs.readFileSync('output/subtasks.json', 'utf8');
+            const start = raw.indexOf('[');
+            const end = raw.lastIndexOf(']');
+            if (start === -1 || end === -1) {
+              console.error('No JSON array found in output');
+              process.exit(1);
+            }
+            const cleaned = raw.slice(start, end + 1);
+            try {
+              const parsed = JSON.parse(cleaned);
+              if (!Array.isArray(parsed) || parsed.length === 0) {
+                console.error('JSON is empty or not an array');
+                process.exit(1);
+              }
+              fs.writeFileSync('output/subtasks.json', cleaned);
+              console.log('JSON validated: ' + parsed.length + ' subtasks');
+            } catch(e) {
+              console.error('Invalid JSON:', e.message);
+              process.exit(1);
+            }
+          "
+          echo "valid=true" >> $GITHUB_OUTPUT
+
+      - name: Flag invalid JSON as pipeline error
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true' && steps.json_valid.outputs.valid != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          gh label create "pipeline-error" --color "d73a4a" --description "Workflow failure" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "pipeline-error"
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "**Issue Breakdown: invalid JSON** — Claude output could not be parsed. Orchestrator will retry.
+
+          _Issue Breakdown Agent_"
+          exit 1
+
+      - name: Create sub-issues
+        if: steps.guard.outputs.proceed == 'true' && steps.dedup.outputs.proceed == 'true' && steps.json_valid.outputs.valid == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          echo "Creating sub-issues..."
+          cat output/subtasks.json
+
+          # Ensure labels exist
+          gh label create "sub-issue" --color "0075ca" --description "Auto-generated sub-task" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "ready" --color "0e8a16" --description "Ready for test case generation" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+
+          # Create each sub-issue
+          echo "$( cat output/subtasks.json )" | \
+          node -e "
+            const fs = require('fs');
+            const tasks = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+            tasks.forEach((t, i) => {
+              const title = t.title.replace(/'/g, \"'\\\\\\''\");
+              const body = t.body.replace(/'/g, \"'\\\\\\''\");
+              fs.appendFileSync('output/create_issues.sh',
+                \`gh issue create --repo \\\$REPO --title '\${title}' --body '\${body}' --label 'sub-issue,ready'\n\`
+              );
+            });
+          "
+
+          export REPO=${{ github.repository }}
+
+          # Create sub-issues and add each to project board
+          chmod +x scripts/add-to-project.sh
+          while IFS= read -r line; do
+            echo "$line"
+            ISSUE_NUM=$(echo "$line" | grep -oE '/issues/[0-9]+' | grep -oE '[0-9]+' || true)
+            if [ -n "$ISSUE_NUM" ]; then
+              ./scripts/add-to-project.sh "$ISSUE_NUM" "Backlog" || true
+            fi
+          done < <(bash output/create_issues.sh)
+
+          echo "Sub-issues created and added to project"
+
+      - name: Comment on parent issue
+        if: steps.json_valid.outputs.valid == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ ! -f output/subtasks.json ]; then exit 0; fi
+
+          COUNT=$(cat output/subtasks.json | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).length)")
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body "**Breakdown complete** — created **${COUNT}** sub-issues.
+
+          Each sub-issue has been labeled \`ready\` and will be picked up by the Test Cases Generator automatically.
+
+          _Breakdown by Business Analyst Agent (Claude Code)_"

@@ -1,0 +1,181 @@
+name: Bug Check
+
+run-name: "Bug Check : PR #${{ github.event.pull_request.number }} — AI review + tests"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  bug-check:
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.head_ref, 'feature/issue-') ||
+      startsWith(github.head_ref, 'hotfix/issue-')
+    concurrency:
+      group: bug-check-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Bug Check Started"
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Branch: ${{ github.head_ref }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --progress=false 2>/dev/null || echo "No package.json — skipping"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Ensure labels exist
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          gh label create "pr_approved" --color "0e8a16" --description "Approved for merge" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "needs-rework" --color "e4e669" --description "Code review issues to fix" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+
+      - name: Fetch PR diff
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh pr diff ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            > input/pr_diff.md
+          echo "PR diff: $(wc -l < input/pr_diff.md) lines"
+
+      - name: Run Claude — review PR diff
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          QUALITY=$(cat .claude/agents/common/quality-rules.md)
+          DESIGN=$(cat .claude/agents/common/design-system.md)
+          AGENT_PROMPT=$(cat .claude/agents/code-reviewer.md)
+          claude --dangerously-skip-permissions --model claude-sonnet-4-6 -p "
+          # Design System
+          $DESIGN
+
+          # Quality Rules
+          $QUALITY
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read the PR diff in input/pr_diff.md.
+          Output to output/review.md.
+          "
+
+      - name: Run tests
+        id: tests
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ -f package.json ] && grep -q '"test"' package.json; then
+            npm test -- --passWithNoTests 2>&1 | tee output/test.log
+            echo "exit_code=$?" >> $GITHUB_OUTPUT
+          else
+            echo "No test script found — skipping"
+            echo "exit_code=0" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: TypeScript check
+        id: tsc
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit 2>&1 | tee output/tsc.log
+            echo "exit_code=$?" >> $GITHUB_OUTPUT
+          else
+            echo "No tsconfig.json — skipping"
+            echo "exit_code=0" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: Evaluate and apply labels
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          REVIEW_STATUS=$(head -1 output/review.md 2>/dev/null || echo "STATUS: NEEDS_FIX")
+          TEST_OK="${{ steps.tests.outputs.exit_code }}"
+          TSC_OK="${{ steps.tsc.outputs.exit_code }}"
+
+          echo "Review: $REVIEW_STATUS"
+          echo "Tests exit: $TEST_OK"
+          echo "TSC exit: $TSC_OK"
+
+          if [[ "$REVIEW_STATUS" == "STATUS: APPROVED" && "$TEST_OK" == "0" && "$TSC_OK" == "0" ]]; then
+            echo "All checks passed"
+
+            gh pr edit ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --remove-label "needs-rework" 2>/dev/null || true
+            gh pr edit ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --add-label "pr_approved"
+
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --body "**Bug Check passed** — code review approved + tests green + TypeScript clean.
+
+          Merging automatically via merge-trigger workflow.
+
+          _Reviewed by Claude Code_"
+
+          else
+            echo "Checks failed"
+
+            REVIEW_NOTES=$(tail -n +3 output/review.md 2>/dev/null || echo "Review failed to run.")
+            TEST_LOG=$(tail -30 output/test.log 2>/dev/null || echo "Tests did not run.")
+            TSC_LOG=$(tail -30 output/tsc.log 2>/dev/null || echo "TSC did not run.")
+
+            gh pr edit ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --remove-label "pr_approved" 2>/dev/null || true
+            gh pr edit ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --add-label "needs-rework"
+
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --body "**Bug Check failed** — issues found below. PR Rework Agent will fix automatically.
+
+          ## Code Review
+          $REVIEW_NOTES
+
+          ## Test Output
+          \`\`\`
+          $TEST_LOG
+          \`\`\`
+
+          ## TypeScript Check
+          \`\`\`
+          $TSC_LOG
+          \`\`\`
+
+          _Reviewed by Claude Code_"
+          fi

@@ -1,0 +1,156 @@
+name: PR Rework
+
+run-name: "Rework PR #${{ github.event.pull_request.number }} : fix review issues"
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rework:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'needs-rework'
+    concurrency:
+      group: pr-rework-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "PR Rework Started"
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Branch: ${{ github.head_ref }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Check rework attempt count
+        id: attempts
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          # Count actual Bug Check failure comments (not label events, which orchestrator retries inflate)
+          COUNT=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(.body | contains("Bug Check failed"))] | length' \
+            2>/dev/null || echo "0")
+          echo "Rework attempt #${COUNT} (based on Bug Check failures)"
+          echo "count=${COUNT}" >> $GITHUB_OUTPUT
+
+      - name: Block if max attempts reached
+        if: steps.attempts.outputs.count > 3
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "**Max rework attempts reached (3)** — human review required.
+
+          The automated pipeline has attempted to fix this PR 3 times without success. Please review manually.
+
+          _PR Rework Agent_"
+
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --remove-label "needs-rework" \
+            --add-label "blocked" 2>/dev/null || true
+
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --progress=false 2>/dev/null || echo "No package.json — skipping"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Configure Git Author
+        run: |
+          git config --global user.name "AI Teammate"
+          git config --global user.email "agent.ai.native@gmail.com"
+
+      - name: Fetch review feedback
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          mkdir -p input output
+
+          gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(.body | contains("Bug Check") or contains("needs-rework") or contains("Rework")) | .body] | join("\n\n---\n\n")' \
+            > input/review_feedback.md
+
+          gh pr diff ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            > input/pr_diff.md
+
+          echo "=== Review Feedback ==="
+          cat input/review_feedback.md
+
+      - name: Run Claude — fix issues
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          CONTEXT=$(cat .claude/agents/common/project-context.md)
+          QUALITY=$(cat .claude/agents/common/quality-rules.md)
+          AGENT_PROMPT=$(cat .claude/agents/rework.md)
+          claude --dangerously-skip-permissions --model claude-sonnet-4-6 -p "
+          # Project Context
+          $CONTEXT
+
+          # Quality Rules
+          $QUALITY
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read input/review_feedback.md — these are the specific issues that need to be fixed.
+          Read input/pr_diff.md for context on what was changed.
+          After fixing, write a brief summary to output/rework_summary.md.
+          "
+
+      - name: Commit and push fixes
+        run: |
+          git add -A
+          git diff --staged --quiet && echo "Nothing to fix — exiting" && exit 0
+          git commit -m "fix: address review feedback on PR #${{ github.event.pull_request.number }}
+
+          Reworked by PR Rework Agent via Claude Code."
+          git push origin ${{ github.head_ref }}
+
+      - name: Remove needs-rework label
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --remove-label "needs-rework" 2>/dev/null || true
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          SUMMARY="Changes pushed for re-review."
+          if [ -f output/rework_summary.md ]; then
+            SUMMARY=$(cat output/rework_summary.md)
+          fi
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "**Rework complete** — fixes pushed.
+
+          $SUMMARY
+
+          _Fixed by PR Rework Agent (Claude Code)_"

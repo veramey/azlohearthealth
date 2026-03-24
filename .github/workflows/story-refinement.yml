@@ -1,0 +1,104 @@
+name: Story Refinement
+
+run-name: "Refinement #${{ github.event.issue.number }} : architecture solution"
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  refinement:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.label.name == 'intake-done' &&
+      !contains(github.event.issue.labels.*.name, 'sub-issue')
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Story Refinement (Solution Architect) Started"
+          echo "Issue: #${{ github.event.issue.number }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Write issue to file
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            > input/issue.md
+
+      - name: Run Claude — architecture solution
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          CONTEXT=$(cat .claude/agents/common/project-context.md)
+          QUALITY=$(cat .claude/agents/common/quality-rules.md)
+          AGENT_PROMPT=$(cat .claude/agents/architect.md)
+          claude --dangerously-skip-permissions --model claude-opus-4-6 -p "
+          # Project Context
+          $CONTEXT
+
+          # Quality Rules
+          $QUALITY
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read input/issue.md and SPEC.md. Read CLAUDE.md for current architecture.
+          Read existing source code (if any) to understand the current state.
+          Output to output/refinement.md (will be APPENDED to the existing issue body).
+          "
+
+      - name: Append refinement and label
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          # Fix #8: Silent failure — flag if Claude produced no output
+          if [ ! -f output/refinement.md ] || [ ! -s output/refinement.md ]; then
+            echo "Claude produced no output — adding pipeline-error"
+            gh label create "pipeline-error" --color "d73a4a" --description "Workflow failure" \
+              --repo ${{ github.repository }} 2>/dev/null || true
+            gh issue edit ${{ github.event.issue.number }} \
+              --repo ${{ github.repository }} \
+              --add-label "pipeline-error"
+            exit 1
+          fi
+
+          CURRENT_BODY=$(gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} --json body -q '.body')
+
+          printf '%s\n\n%s\n\n---\n_Refined by Solution Architect Agent (Claude Code)_' \
+            "$CURRENT_BODY" "$(cat output/refinement.md)" > output/new_body.txt
+
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --body-file output/new_body.txt
+
+          gh label create "refined" --color "c2e0c6" --description "Issue refined with architecture solution" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "refined"
+
+          # Move on project board
+          chmod +x scripts/update-project-status.sh
+          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Architecture" || true
+
+          echo "Issue refined and labeled"
