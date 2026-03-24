@@ -8,7 +8,7 @@ set -e
 ISSUE_NUMBER="$1"
 STATUS_NAME="${2:-Backlog}"
 OWNER="${GITHUB_REPOSITORY_OWNER}"
-PROJECT_TITLE="azlo"
+PROJECT_TITLE="azloheart"
 
 if [ -z "$ISSUE_NUMBER" ]; then
   echo "Usage: add-to-project.sh ISSUE_NUMBER [STATUS_NAME]"

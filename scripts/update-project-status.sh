@@ -8,7 +8,7 @@ set -e
 ISSUE_NUMBER="$1"
 STATUS_NAME="$2"
 OWNER="${GITHUB_REPOSITORY_OWNER}"
-PROJECT_TITLE="azlo"
+PROJECT_TITLE="azloheart"
 
 if [ -z "$ISSUE_NUMBER" ] || [ -z "$STATUS_NAME" ]; then
   echo "Usage: update-project-status.sh ISSUE_NUMBER STATUS_NAME"
