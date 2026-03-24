@@ -1,22 +1,30 @@
-## Issue #7 — constants/colors.ts
+# Issue #11 — TypeScript Type Definitions for Health Metrics
 
-### What was implemented
+## What was implemented
 
-Created `constants/colors.ts` exporting a fully-typed, frozen `Colors` object with four nested groups:
+### `types/health.ts`
+Single source of truth for all health metric type definitions:
 
-- `Colors.background` — `primary: #0D0D0D`, `surface: #1A1A1A`
-- `Colors.text` — `primary: #FFFFFF`, `secondary: #A1A1AA`
-- `Colors.norm` — `green: #22C55E`, `yellow: #EAB308`, `red: #EF4444`
-- `Colors.heartScore` — `excellent`, `good`, `fair`, `needsAttention`, `atRisk`
+- **`METRIC_TYPES`** — `as const` array of all 12 metric type strings for runtime iteration
+- **`MetricType`** — string union derived from `METRIC_TYPES` via `(typeof METRIC_TYPES)[number]`
+- **`MetricUnit`** — string union: `bpm | mmHg | ms | mg/dL | kg | hours | count | minutes`
+- **`DataSource`** — `'healthkit' | 'manual'`
+- **`NormStatus`** — `'green' | 'yellow' | 'red' | 'none'` (`'none'` for trend-only metrics)
+- **`MetricReading`** — interface with `metricType`, `value`, `unit`, `date` (Date | string), `source`
+- **`BloodPressureReading`** — interface with `systolic`, `diastolic`, `date`, `source`, optional `pulse`
+- **`MetricDefinition`** — interface with `type`, `displayName`, `unit`, `healthKitIdentifier?`, `hasNorm`
 
-Overlapping norm/heartScore colors (`green`/`excellent`, `yellow`/`fair`, `red`/`atRisk`) reference shared base constants — no duplication. All nested objects are frozen via `Object.freeze`. `as const` assertions preserve literal types throughout.
+### Key decisions
+- `MetricType` derived from `METRIC_TYPES` — single source of truth, no duplication
+- Validation constants (BP ranges) kept out — they belong in `constants/metrics.ts`
+- Blood pressure split into `bloodPressureSystolic` + `bloodPressureDiastolic` for independent norm ranges
 
-### Files created
+## Files created
 
-- `constants/colors.ts` — the implementation
-- `constants/__tests__/colors.test.ts` — Jest unit tests (values, shared refs, immutability, unique keys)
-- `constants/__tests__/colors.test-d.ts` — compile-time type tests confirming literal inference
+- `types/health.ts` — the implementation
+- `types/__tests__/health.test.ts` — Jest runtime tests
+- `types/__tests__/health.test-d.ts` — compile-time type tests (tsc --noEmit)
 
-### Acceptance criteria
+## Acceptance criteria
 
 All AC items satisfied. All test cases from the issue spec are covered.

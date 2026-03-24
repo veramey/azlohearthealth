@@ -1,4 +1,4 @@
-title:	Implement constants/colors.ts with typed color palette
+title:	Create TypeScript type definitions for all health metrics in types/health.ts
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
@@ -6,71 +6,59 @@ comments:	0
 assignees:	
 projects:	azloheart (Backlog)
 milestone:	
-number:	7
+number:	11
 --
-Parent: #6
+Parent: #10
 
-See SPEC.md §7.2 (Visual Direction) and §8.5 (Score Display)
+See SPEC.md §3 (Data Model), §3 (Manual Blood Pressure Input)
 
-Create `constants/colors.ts` exporting a fully-typed, frozen color palette object organized by semantic purpose. Use `as const` for literal type inference and autocomplete.
+Create `types/health.ts` as the single source of truth for all metric-related type definitions. Use `as const` string union pattern (not TypeScript `enum`) for tree-shaking and consistency.
 
-### Implementation Details
+### Types to define:
+- `MetricType` — string union covering all 12 values: `heartRate`, `restingHeartRate`, `bloodPressureSystolic`, `bloodPressureDiastolic`, `hrv`, `bloodGlucose`, `weight`, `sleep`, `steps`, `workouts`, `walkingHeartRateAverage`, `vo2Max`
+- `METRIC_TYPES` — `as const` array of all MetricType values for runtime iteration
+- `MetricUnit` — string union of all units (bpm, mmHg, ms, mg/dL, kg, hours, count, minutes)
+- `DataSource` — `'healthkit' | 'manual'`
+- `NormStatus` — `'green' | 'yellow' | 'red' | 'none'`
+- `MetricReading` — interface with `metricType`, `value` (number), `unit` (string), `date` (Date | string), `source` (DataSource)
+- `BloodPressureReading` — interface composing systolic + diastolic MetricReading values with shared timestamp, source, and optional pulse (number)
+- `MetricDefinition` — interface with `type` (MetricType), `displayName` (string), `unit` (MetricUnit), `healthKitIdentifier` (optional string), `hasNorm` (boolean)
 
-**Background colors:**
-- Primary background: `#0D0D0D`
-- Surface/card background: `#1A1A1A`
-
-**Text colors:**
-- Primary text: white (`#FFFFFF`)
-- Secondary text: light gray (e.g. `#A1A1AA`)
-
-**Norm indicator colors:**
-- Green (normal): `#22C55E`
-- Yellow (borderline): `#EAB308`
-- Red (outside normal): `#EF4444`
-
-**Heart Score tier colors:**
-- Excellent: `#22C55E`
-- Good: `#84CC16`
-- Fair: `#EAB308`
-- Needs Attention: `#F97316`
-- At Risk: `#EF4444`
-
-Define overlapping colors (green, yellow, red) as shared base values referenced by both `norm` and `heartScore` groups to avoid duplication.
-
-Export the `Colors` object with nested groups: `background`, `text`, `norm`, `heartScore`.
-
-### Testing
-- Unit test verifying all required hex values are present and match spec
-- Unit test verifying no duplicate keys within groups
-- Compile-time check that values resolve to literal types (not `string`)
+### Key decisions:
+- Blood pressure produces 2 MetricType entries (systolic + diastolic) because they have independent norm ranges
+- `NormStatus` includes `'none'` for weight, VO2 max, and walking HR average (trend only, no absolute norm in MVP)
+- Keep validation constants (BP ranges) out of this file — they belong in `constants/metrics.ts`
+- `DataSource` is `'healthkit' | 'manual'` only — two sources in MVP
 
 ## Acceptance Criteria
-- [ ] File `constants/colors.ts` exists and exports a typed color palette object
-- [ ] Background colors include `#0D0D0D` (primary) and `#1A1A1A` (surface/card)
-- [ ] Norm indicator colors defined: green (`#22C55E`), yellow (`#EAB308`), red (`#EF4444`)
-- [ ] Heart Score label colors defined for all five tiers: Excellent (`#22C55E`), Good (`#84CC16`), Fair (`#EAB308`), Needs Attention (`#F97316`), At Risk (`#EF4444`)
-- [ ] Text colors include white/light-gray variants for primary and secondary text
-- [ ] Uses `as const` for literal type inference
-- [ ] Overlapping norm/heartScore colors share base values without duplication
+- [ ] `types/health.ts` exports a `MetricType` string union covering all 12 values (11 metrics, BP split into 2)
+- [ ] `METRIC_TYPES` array exported for runtime iteration over all metric types
+- [ ] `MetricReading` interface defined with `metricType`, `value`, `unit`, `date`, and `source` fields
+- [ ] `NormStatus` type defined as `'green' | 'yellow' | 'red' | 'none'`
+- [ ] `BloodPressureReading` interface includes systolic, diastolic, optional pulse, shared timestamp and source
+- [ ] `MetricDefinition` interface defined with `type`, `displayName`, `unit`, `healthKitIdentifier?`, `hasNorm`
+- [ ] All types compile cleanly under `tsc --noEmit` with strict mode enabled
+- [ ] All types are exported for consumption by other modules
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `Colors.background.primary` equals `#0D0D0D` and `Colors.background.surface` equals `#1A1A1A`
-- [ ] All three norm indicator values match spec: `Colors.norm.green === '#22C55E'`, `Colors.norm.yellow === '#EAB308'`, `Colors.norm.red === '#EF4444'`
-- [ ] All five Heart Score tier colors match spec: `excellent === '#22C55E'`, `good === '#84CC16'`, `fair === '#EAB308'`, `needsAttention === '#F97316'`, `atRisk === '#EF4444'`
-- [ ] Text colors present: `Colors.text.primary === '#FFFFFF'`, `Colors.text.secondary === '#A1A1AA'`
+- [ ] `MetricType` union includes all 12 values: `heartRate`, `restingHeartRate`, `bloodPressureSystolic`, `bloodPressureDiastolic`, `hrv`, `bloodGlucose`, `weight`, `sleep`, `steps`, `workouts`, `walkingHeartRateAverage`, `vo2Max` — verified via `METRIC_TYPES.length === 12` and membership checks
+- [ ] `METRIC_TYPES` array contains exactly the same 12 values as the `MetricType` union and each element is assignable to `MetricType`
+- [ ] A valid `MetricReading` object with `metricType: 'heartRate'`, `value: 72`, `unit: 'bpm'`, `date: new Date()`, `source: 'healthkit'` satisfies the interface with no TypeScript errors
 
 ### Edge Cases
-- [ ] Overlapping colors are shared references — `Colors.norm.green === Colors.heartScore.excellent` (same value, no duplication)
-- [ ] `Colors` object is frozen — attempting `Colors.background.primary = '#000000'` in strict mode throws or has no effect (enforces immutability via `Object.isFrozen`)
-- [ ] TypeScript literal types: `typeof Colors.norm.green` resolves to `'#22C55E'` (not `string`) — verified via `satisfies` or `as const` assertion in a `.test-d.ts` type test
+- [ ] `NormStatus` accepts `'none'` (used for weight, VO2 max, walking HR average) — compile-time check that `'none'` is a valid `NormStatus` value
+- [ ] `BloodPressureReading` allows `pulse` to be omitted (optional field) — object without `pulse` must still satisfy the interface
+- [ ] `MetricDefinition` allows `healthKitIdentifier` to be omitted (optional field) — a manual-only metric definition without `healthKitIdentifier` must compile cleanly
+- [ ] `DataSource` only accepts `'healthkit'` or `'manual'` — assigning any other string must produce a TypeScript compile error (negative type test)
 
 ### Mocking Strategy
-- HealthKit: not applicable — this is a pure constants module with no runtime dependencies
-- Navigation: not applicable
-- Storage: not applicable — import `Colors` directly from `constants/colors.ts` in each test
+- HealthKit: not applicable — this sub-issue is pure type definitions with no runtime logic
+- Navigation: not applicable — no UI or routing involved
+- Storage: not applicable — no DB interaction; types file is compile-time only
+
+> **Note:** All tests for this sub-issue are static TypeScript type checks, not runtime Jest assertions. Use `tsd` or `expect-type` (e.g. `expectTypeOf` from `vitest`) to assert assignability and type errors, or verify via `tsc --noEmit --strict` in the test script. A Jest smoke test importing all exports from `types/health.ts` can confirm the module loads without runtime errors.
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
