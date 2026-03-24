@@ -1,0 +1,189 @@
+name: Bootstrap — Create MVP Issues from SPEC
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bootstrap
+      cancel-in-progress: false
+
+    steps:
+      - name: Job Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Bootstrap Agent Started"
+          echo "Creating MVP issues from SPEC.md"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Dedup check — skip if issues already exist
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label "feature" \
+            --state all \
+            --limit 1 \
+            --json number \
+            --jq 'length')
+
+          if [ "$EXISTING" != "0" ]; then
+            echo "Feature issues already exist — bootstrap already ran. Skipping."
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          else
+            echo "No feature issues found — proceeding with bootstrap."
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        if: steps.dedup.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Install Claude Code CLI
+        if: steps.dedup.outputs.proceed == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude — analyze SPEC and generate issues
+        if: steps.dedup.outputs.proceed == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          mkdir -p input output
+
+          CONTEXT=$(cat .claude/agents/common/project-context.md)
+          AGENT_PROMPT=$(cat .claude/agents/bootstrap.md)
+          claude --dangerously-skip-permissions --model claude-opus-4-6 -p "
+          # Project Context
+          $CONTEXT
+
+          # Agent Instructions
+          $AGENT_PROMPT
+
+          ## Task
+          Read context/SPEC.md carefully — the full product specification.
+          Decompose the MVP into epic-level GitHub issues.
+          Write the JSON array to output/issues.json.
+          "
+
+      - name: Validate JSON output
+        if: steps.dedup.outputs.proceed == 'true'
+        id: validate
+        run: |
+          if [ ! -f output/issues.json ] || [ ! -s output/issues.json ]; then
+            echo "Claude produced no output"
+            echo "json_valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Strip markdown fences if present
+          sed -i 's/^```json//g; s/^```//g' output/issues.json
+          # Trim leading/trailing whitespace
+          sed -i '/^$/d' output/issues.json
+
+          # Validate JSON
+          if ! python3 -c "import json; data=json.load(open('output/issues.json')); assert isinstance(data, list), 'Not an array'; assert len(data) >= 5, f'Too few issues: {len(data)}'"; then
+            echo "JSON validation failed"
+            echo "json_valid=false" >> $GITHUB_OUTPUT
+            cat output/issues.json
+            exit 1
+          fi
+
+          COUNT=$(python3 -c "import json; print(len(json.load(open('output/issues.json'))))")
+          echo "Validated $COUNT issues"
+          echo "json_valid=true" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub issues
+        if: steps.dedup.outputs.proceed == 'true' && steps.validate.outputs.json_valid == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          TOTAL=$(python3 -c "import json; print(len(json.load(open('output/issues.json'))))")
+          echo "Creating $TOTAL issues..."
+
+          # Ensure labels exist
+          gh label create "bootstrap" --color "5319e7" --description "Created by Bootstrap Agent" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "feature" --color "a2eeef" --description "Feature request" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "needs-design" --color "d876e3" --description "Needs design requirements" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "P0-critical" --color "b60205" --description "Priority: Critical" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "P1-high" --color "d93f0b" --description "Priority: High" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "P2-medium" --color "fbca04" --description "Priority: Medium" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "P3-low" --color "0e8a16" --description "Priority: Low" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "intake-done" --color "e4e669" --description "Issue structured by Intake Agent" \
+            --repo ${{ github.repository }} 2>/dev/null || true
+
+          CREATED=0
+          ISSUE_NUMS=""
+
+          # Step 1: Create all issues WITHOUT intake-done (no pipeline trigger yet)
+          for i in $(seq 0 $((TOTAL - 1))); do
+            TITLE=$(python3 -c "import json; print(json.load(open('output/issues.json'))[$i]['title'])")
+            BODY=$(python3 -c "import json; print(json.load(open('output/issues.json'))[$i]['body'])")
+            LABELS_JSON=$(python3 -c "import json; print(','.join(json.load(open('output/issues.json'))[$i].get('labels', ['feature'])))")
+            # Add bootstrap label to prevent intake.yml from processing these
+            LABELS_JSON="${LABELS_JSON},bootstrap"
+
+            # Extract priority from body
+            PRIORITY=$(echo "$BODY" | sed -n '/^## Priority/,/^## /p' | grep -oE 'P[0-3]-(critical|high|medium|low)' | head -1 || echo "")
+            if [ -n "$PRIORITY" ]; then
+              LABELS_JSON="${LABELS_JSON},${PRIORITY}"
+            fi
+
+            # Write body to temp file (avoids shell escaping issues)
+            printf '%s\n\n---\n_Created by Bootstrap Agent (Claude Code) from SPEC.md_' "$BODY" > /tmp/issue_body.md
+
+            ISSUE_NUM=$(gh issue create \
+              --repo ${{ github.repository }} \
+              --title "$TITLE" \
+              --body-file /tmp/issue_body.md \
+              --label "$LABELS_JSON" \
+              2>&1 | grep -oE '[0-9]+$')
+
+            echo "Created issue #${ISSUE_NUM}: ${TITLE}"
+            ISSUE_NUMS="${ISSUE_NUMS} ${ISSUE_NUM}"
+
+            # Add to project board
+            if [ -f scripts/add-to-project.sh ]; then
+              chmod +x scripts/add-to-project.sh
+              ./scripts/add-to-project.sh "$ISSUE_NUM" "Backlog" || true
+            fi
+
+            CREATED=$((CREATED + 1))
+            sleep 1
+          done
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Created $CREATED issues. Now triggering pipeline..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Step 2: Add intake-done label one by one with delay
+          # This triggers story-refinement via the 'labeled' event
+          # Stagger to avoid overwhelming the pipeline
+          for NUM in $ISSUE_NUMS; do
+            gh issue edit "$NUM" \
+              --repo ${{ github.repository }} \
+              --add-label "intake-done"
+            echo "Triggered pipeline for issue #${NUM}"
+            sleep 5
+          done
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Bootstrap complete: $CREATED issues created and pipeline triggered"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

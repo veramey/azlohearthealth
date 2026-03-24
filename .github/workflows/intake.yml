@@ -16,6 +16,7 @@ jobs:
     if: |
       !contains(github.event.issue.labels.*.name, 'sub-issue') &&
       !contains(github.event.issue.labels.*.name, 'intake-done') &&
+      !contains(github.event.issue.labels.*.name, 'bootstrap') &&
       !contains(github.event.issue.labels.*.name, 'bug')
 
     steps:
