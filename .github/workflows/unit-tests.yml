@@ -21,7 +21,7 @@ jobs:
           # cache: npm  # Re-enable after package-lock.json exists
 
       - name: Install dependencies
-        run: npm ci --no-audit --progress=false 2>/dev/null || echo "No package.json — skipping"
+        run: npm install --no-audit --progress=false 2>/dev/null || echo "No package.json — skipping"
 
       - name: Run tests
         run: |
