@@ -97,8 +97,12 @@ jobs:
             --repo ${{ github.repository }} \
             --add-label "refined"
 
-          # Move on project board
+          # Move on project board — architecture is done, move to next stage
           chmod +x scripts/update-project-status.sh
-          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Architecture" || true
+          if grep -qi "needs-design" <<< "$(gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json labels --jq '[.labels[].name] | join(" ")')"; then
+            ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Design" || true
+          else
+            ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Development" || true
+          fi
 
           echo "Issue refined and labeled"

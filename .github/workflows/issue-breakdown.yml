@@ -220,14 +220,17 @@ jobs:
           export REPO=${{ github.repository }}
 
           # Create sub-issues and add each to project board
-          chmod +x scripts/add-to-project.sh
+          chmod +x scripts/add-to-project.sh scripts/update-project-status.sh
           while IFS= read -r line; do
             echo "$line"
             ISSUE_NUM=$(echo "$line" | grep -oE '/issues/[0-9]+' | grep -oE '[0-9]+' || true)
             if [ -n "$ISSUE_NUM" ]; then
-              ./scripts/add-to-project.sh "$ISSUE_NUM" "Backlog" || true
+              ./scripts/add-to-project.sh "$ISSUE_NUM" "Ready for Development" || true
             fi
           done < <(bash output/create_issues.sh)
+
+          # Move parent issue to Ready for Development
+          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Development" || true
 
           echo "Sub-issues created and added to project"
 

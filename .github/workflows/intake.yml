@@ -114,8 +114,9 @@ jobs:
             --repo ${{ github.repository }} \
             --add-label "intake-done,feature"
 
-          # Add to project board
-          chmod +x scripts/add-to-project.sh
-          ./scripts/add-to-project.sh ${{ github.event.issue.number }} "Backlog" || true
+          # Add to project board — intake done, ready for architecture
+          chmod +x scripts/add-to-project.sh scripts/update-project-status.sh
+          ./scripts/add-to-project.sh ${{ github.event.issue.number }} "Ready for Architecture" || true
+          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Architecture" || true
 
           echo "Issue structured and labeled intake-done"
