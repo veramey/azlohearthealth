@@ -1,30 +1,35 @@
-# Issue #12 — Health Metric Type Tests
+# Issue #16 — Verify constants/colors.ts matches SPEC.md
 
-## What was done
+## Status: No changes required
 
-Since `types/health.ts` did not yet exist (previous sub-task dependency), it was created first, then both test files were written.
+All hex values in `constants/colors.ts` already match SPEC.md §7.2 and §8.5 exactly:
 
-### Files created
+| Key | Expected | Actual |
+|-----|----------|--------|
+| `background.primary` | `#0D0D0D` | `#0D0D0D` ✓ |
+| `background.surface` | `#1A1A1A` | `#1A1A1A` ✓ |
+| `text.primary` | `#FFFFFF` | `#FFFFFF` ✓ |
+| `text.secondary` | `#A1A1AA` | `#A1A1AA` ✓ |
+| `norm.green` | `#22C55E` | `#22C55E` ✓ |
+| `norm.yellow` | `#EAB308` | `#EAB308` ✓ |
+| `norm.red` | `#EF4444` | `#EF4444` ✓ |
+| `heartScore.excellent` | `#22C55E` | `#22C55E` ✓ |
+| `heartScore.good` | `#84CC16` | `#84CC16` ✓ |
+| `heartScore.fair` | `#EAB308` | `#EAB308` ✓ |
+| `heartScore.needsAttention` | `#F97316` | `#F97316` ✓ |
+| `heartScore.atRisk` | `#EF4444` | `#EF4444` ✓ |
 
-**`types/health.ts`**
-- `METRIC_TYPES` — `as const` array of all 12 metric identifier strings
-- `MetricType` — union type derived from the array
-- `NormStatus` — `'green' | 'yellow' | 'red' | 'none'`
-- `ReadingSource` — `'healthkit' | 'manual'` (no `'bluetooth'`)
-- `MetricReading` — general reading with type, value, unit, timestamp, source
-- `BloodPressureReading` — required `systolic` + `diastolic`, optional `pulse`
+## Implementation verified
 
-**`types/__tests__/health.test.ts`** (runtime, Jest)
-- Asserts `METRIC_TYPES` has exactly 12 entries
-- Asserts each of the 12 expected strings is present (parameterised with `it.each`)
-- Asserts no duplicates via `Set` size check
+- `Object.freeze()` applied to all nested objects (immutability)
+- `as const` applied — TypeScript infers literal types, not `string`
+- `ColorsType` exported for downstream usage
+- Shared base constants (`_green`, `_yellow`, `_red`) prevent duplication
+- `constants/__tests__/colors.test.ts` covers all AC: value assertions, shared base values, immutability, and key uniqueness
+- `constants/__tests__/colors.test-d.ts` covers compile-time literal type assertions
 
-**`types/__tests__/health.test-d.ts`** (compile-time, `tsc --noEmit`)
-- Confirms `MetricType` accepts all 12 identifiers
-- Confirms `NormStatus` accepts all 4 variants
-- Confirms `source: 'manual'` and `source: 'healthkit'` are assignable to `MetricReading`
-- Uses `@ts-expect-error` to assert `source: 'bluetooth'` is rejected
-- Uses `@ts-expect-error` to assert `BloodPressureReading` requires both `systolic` and `diastolic`
+## Files
 
-## No mocks needed
-Tests verify pure types and a const array — no HealthKit, navigation, or storage involved.
+- `constants/colors.ts` — no changes needed
+- `constants/__tests__/colors.test.ts` — no changes needed
+- `constants/__tests__/colors.test-d.ts` — no changes needed
