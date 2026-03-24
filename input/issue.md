@@ -1,4 +1,4 @@
-title:	Implement constants/colors.ts with typed color palette
+title:	Add type-level and runtime tests for health metric types
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
@@ -6,71 +6,56 @@ comments:	0
 assignees:	
 projects:	azloheart (Backlog)
 milestone:	
-number:	7
+number:	12
 --
-Parent: #6
+Parent: #10
 
-See SPEC.md §7.2 (Visual Direction) and §8.5 (Score Display)
+See SPEC.md §3 (Data Model)
 
-Create `constants/colors.ts` exporting a fully-typed, frozen color palette object organized by semantic purpose. Use `as const` for literal type inference and autocomplete.
+Create tests to verify the health metric type definitions are correct and complete.
 
-### Implementation Details
+Depends on: `types/health.ts` from previous sub-task.
 
-**Background colors:**
-- Primary background: `#0D0D0D`
-- Surface/card background: `#1A1A1A`
+### Files to create:
+- `types/__tests__/health.test.ts` — Runtime sanity checks
+- `types/__tests__/health.test-d.ts` — Type-level assertions (using `tsd` or `expectTypeOf`)
 
-**Text colors:**
-- Primary text: white (`#FFFFFF`)
-- Secondary text: light gray (e.g. `#A1A1AA`)
+### Runtime tests:
+- Verify `METRIC_TYPES` array contains exactly 12 entries
+- Verify all expected metric type strings are present in the array
+- Verify no duplicates in `METRIC_TYPES`
 
-**Norm indicator colors:**
-- Green (normal): `#22C55E`
-- Yellow (borderline): `#EAB308`
-- Red (outside normal): `#EF4444`
-
-**Heart Score tier colors:**
-- Excellent: `#22C55E`
-- Good: `#84CC16`
-- Fair: `#EAB308`
-- Needs Attention: `#F97316`
-- At Risk: `#EF4444`
-
-Define overlapping colors (green, yellow, red) as shared base values referenced by both `norm` and `heartScore` groups to avoid duplication.
-
-Export the `Colors` object with nested groups: `background`, `text`, `norm`, `heartScore`.
-
-### Testing
-- Unit test verifying all required hex values are present and match spec
-- Unit test verifying no duplicate keys within groups
-- Compile-time check that values resolve to literal types (not `string`)
+### Type-level tests:
+- `MetricReading` with `source: 'manual'` is assignable
+- `MetricReading` with `source: 'bluetooth'` is NOT assignable
+- `BloodPressureReading` requires both systolic and diastolic values
+- `NormStatus` accepts all 4 variants (`green`, `yellow`, `red`, `none`)
+- `MetricType` accepts all 12 metric identifiers
 
 ## Acceptance Criteria
-- [ ] File `constants/colors.ts` exists and exports a typed color palette object
-- [ ] Background colors include `#0D0D0D` (primary) and `#1A1A1A` (surface/card)
-- [ ] Norm indicator colors defined: green (`#22C55E`), yellow (`#EAB308`), red (`#EF4444`)
-- [ ] Heart Score label colors defined for all five tiers: Excellent (`#22C55E`), Good (`#84CC16`), Fair (`#EAB308`), Needs Attention (`#F97316`), At Risk (`#EF4444`)
-- [ ] Text colors include white/light-gray variants for primary and secondary text
-- [ ] Uses `as const` for literal type inference
-- [ ] Overlapping norm/heartScore colors share base values without duplication
+- [ ] Runtime tests pass with `npm test`
+- [ ] Type-level tests confirm type assignability and rejection of invalid types
+- [ ] Tests cover all 12 MetricType values, all 4 NormStatus variants, and BloodPressureReading structure
+- [ ] No mocks needed — tests verify pure types and const arrays only
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `Colors.background.primary` equals `#0D0D0D` and `Colors.background.surface` equals `#1A1A1A`
-- [ ] All three norm indicator values match spec: `Colors.norm.green === '#22C55E'`, `Colors.norm.yellow === '#EAB308'`, `Colors.norm.red === '#EF4444'`
-- [ ] All five Heart Score tier colors match spec: `excellent === '#22C55E'`, `good === '#84CC16'`, `fair === '#EAB308'`, `needsAttention === '#F97316'`, `atRisk === '#EF4444'`
-- [ ] Text colors present: `Colors.text.primary === '#FFFFFF'`, `Colors.text.secondary === '#A1A1AA'`
+- [ ] `METRIC_TYPES` array contains exactly 12 entries (one for each tracked metric defined in SPEC.md §3)
+- [ ] All 12 expected metric type strings are present in `METRIC_TYPES` (e.g. `'heart_rate'`, `'resting_heart_rate'`, `'blood_pressure_systolic'`, `'blood_pressure_diastolic'`, `'hrv'`, `'blood_glucose'`, `'weight'`, `'sleep'`, `'steps'`, `'workouts'`, `'walking_hr_avg'`, `'vo2_max'`)
+- [ ] `NormStatus` type accepts all 4 valid variants: `'green'`, `'yellow'`, `'red'`, `'none'`
+- [ ] `MetricReading` with `source: 'manual'` is assignable to the type
+- [ ] `MetricType` accepts all 12 metric identifier strings
 
 ### Edge Cases
-- [ ] Overlapping colors are shared references — `Colors.norm.green === Colors.heartScore.excellent` (same value, no duplication)
-- [ ] `Colors` object is frozen — attempting `Colors.background.primary = '#000000'` in strict mode throws or has no effect (enforces immutability via `Object.isFrozen`)
-- [ ] TypeScript literal types: `typeof Colors.norm.green` resolves to `'#22C55E'` (not `string`) — verified via `satisfies` or `as const` assertion in a `.test-d.ts` type test
+- [ ] `METRIC_TYPES` has no duplicate entries (Set size equals array length)
+- [ ] `MetricReading` with `source: 'bluetooth'` is NOT assignable (type-level rejection)
+- [ ] `BloodPressureReading` requires both `systolic` and `diastolic` fields — omitting either causes a type error
 
 ### Mocking Strategy
-- HealthKit: not applicable — this is a pure constants module with no runtime dependencies
-- Navigation: not applicable
-- Storage: not applicable — import `Colors` directly from `constants/colors.ts` in each test
+- HealthKit: none required — tests verify pure types and const arrays only
+- Navigation: none required
+- Storage: none required
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
