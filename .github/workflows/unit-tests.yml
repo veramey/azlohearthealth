@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
+          # cache: npm  # Re-enable after package-lock.json exists
 
       - name: Install dependencies
         run: npm ci --no-audit --progress=false 2>/dev/null || echo "No package.json — skipping"
