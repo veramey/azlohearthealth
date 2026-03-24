@@ -92,10 +92,9 @@ jobs:
         id: tests
         shell: bash
         run: |
-          set -o pipefail
           if [ -f package.json ] && grep -q '"test"' package.json; then
-            npm test -- --passWithNoTests 2>&1 | tee output/test.log
-            echo "exit_code=$?" >> $GITHUB_OUTPUT
+            npm test -- --passWithNoTests 2>&1 | tee output/test.log && EC=0 || EC=$?
+            echo "exit_code=$EC" >> $GITHUB_OUTPUT
           else
             echo "No test script found — skipping"
             echo "exit_code=0" >> $GITHUB_OUTPUT
@@ -106,10 +105,9 @@ jobs:
         id: tsc
         shell: bash
         run: |
-          set -o pipefail
           if [ -f tsconfig.json ]; then
-            npx tsc --noEmit 2>&1 | tee output/tsc.log
-            echo "exit_code=$?" >> $GITHUB_OUTPUT
+            npx tsc --noEmit 2>&1 | tee output/tsc.log && EC=0 || EC=$?
+            echo "exit_code=$EC" >> $GITHUB_OUTPUT
           else
             echo "No tsconfig.json — skipping"
             echo "exit_code=0" >> $GITHUB_OUTPUT
@@ -121,8 +119,11 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           REVIEW_STATUS=$(head -1 output/review.md 2>/dev/null || echo "STATUS: NEEDS_FIX")
+          # Default empty exit codes to "0" — steps that skipped (no package.json/tsconfig) are OK
           TEST_OK="${{ steps.tests.outputs.exit_code }}"
           TSC_OK="${{ steps.tsc.outputs.exit_code }}"
+          TEST_OK="${TEST_OK:-0}"
+          TSC_OK="${TSC_OK:-0}"
 
           echo "Review: $REVIEW_STATUS"
           echo "Tests exit: $TEST_OK"
