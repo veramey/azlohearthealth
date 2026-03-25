@@ -1,31 +1,30 @@
-# Issue #19 — Extend types/health.ts with MetricDefinition and related types
+# Issue #26 — constants/theme.ts
 
 ## Status: Complete
 
-Extended `types/health.ts` with all required types and added compile-time tests.
+Created `constants/theme.ts` with typography, spacing, and border radius design tokens, following the same `Object.freeze()` + `as const` pattern as `constants/colors.ts`.
 
-## Changes
+## Files created
 
-### `types/health.ts`
-Added 5 new exported types (all existing types unchanged):
+- `constants/theme.ts` — exports `Typography`, `Spacing`, `BorderRadius`, and `MIN_TAP_TARGET`
+- `constants/__tests__/theme.test.ts` — Jest tests covering all values, immutability, and mutation enforcement
 
-- `MetricUnit` — string union with 9 unit values (`'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`)
-- `MetricCategory` — string union with 4 categories (`'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`)
-- `NormRange` — interface with `green`, `yellow`, `red` sub-objects each typed `{ min: number; max: number }`
-- `HeartScoreConfig` — interface with `weight: number` and optional `bpCompositeGroup?: string`
-- `MetricDefinition` — full metric entry interface with all required fields
+## Exports
 
-### `types/__tests__/health.test-d.ts`
-Added compile-time type assertions covering:
+- `Typography` — `fontFamily: 'System'`, `weights` (regular/medium/semibold/bold), `sizes` (heading1–caption), `lineHeights`
+- `Spacing` — 4-point scale: xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
+- `BorderRadius` — small=8, medium=12, large=16
+- `MIN_TAP_TARGET = 44`
+- Type aliases: `TypographyType`, `SpacingType`, `BorderRadiusType`
 
-- Happy path: all 9 `MetricUnit` literals, all 4 `MetricCategory` literals, valid `NormRange`, fully-populated `MetricDefinition`, `normRanges: null` (trend-only)
-- Edge cases: `@ts-expect-error` for `'lbs'` as `MetricUnit`, `'unknown-category'` as `MetricCategory`, `MetricDefinition` missing `heartScoreWeight`
+All nested objects are individually `Object.freeze()`'d. All values use `as const` for literal type inference.
 
 ## Acceptance Criteria
 
-- [x] `MetricUnit` string union exported with all 9 unit values
-- [x] `MetricCategory` string union exported with 4 categories
-- [x] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
-- [x] `MetricDefinition` interface exported with all required fields
-- [x] All existing types remain unchanged and exported
-- [x] Strict TypeScript — no `any`, no implicit types
+- [x] `Typography` exported with `fontFamily: 'System'`, all weight variants, sizes (heading1=34 … caption=12), and line heights
+- [x] `Spacing` exported with xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
+- [x] `BorderRadius` exported with small=8, medium=12, large=16
+- [x] All exports use `as const` for literal type safety
+- [x] All objects (including nested) are `Object.freeze()`'d
+- [x] `MIN_TAP_TARGET = 44` exported
+- [x] Type aliases `TypographyType`, `SpacingType`, `BorderRadiusType` exported

@@ -1,65 +1,66 @@
-title:	Extend types/health.ts with MetricDefinition and related types
+title:	Create constants/theme.ts with typography, spacing, and border radius tokens
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
 comments:	0
 assignees:	
-projects:	azloheart (In Development)
+projects:	azloheart (Backlog)
 milestone:	
-number:	19
+number:	26
 --
-Parent: #18
+Parent: #25
 
-See SPEC.md §3 (Data Model), §8.2 (Heart Score Architecture)
+See SPEC.md §7.2 (Visual Direction), §7.4 (Design Principles), §5.3 (Project Structure)
 
-Extend the existing `types/health.ts` file with the types needed by `constants/metrics.ts`:
+Create `constants/theme.ts` following the exact same pattern as `constants/colors.ts` — `Object.freeze()` for runtime immutability + `as const` for compile-time literal types + exported type alias.
 
-- `MetricUnit` — string union: `'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`
-- `MetricCategory` — string union: `'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`
-- `NormRange` — object with `green`, `yellow`, `red` sub-objects each containing `{ min: number; max: number }`
-- `HeartScoreConfig` — object with `weight: number` (0–100) and optional `bpCompositeGroup?: string`
-- `MetricDefinition` — full metric entry: `id: MetricType`, `displayName: string`, `unit: MetricUnit`, `healthKitIdentifier: string`, `normRanges: NormRange | null`, `category: MetricCategory`, `heartScoreWeight: number`, `bpCompositeGroup?: string`
+The file defines three token groups plus a layout constant:
 
-Keep all existing types (`MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading`) unchanged.
+### Typography
+- `fontFamily`: `'System'` (resolves to SF Pro on iOS automatically)
+- `weights`: `{ regular: '400', medium: '500', semibold: '600', bold: '700' }` (string literals for React Native fontWeight)
+- `sizes`: `{ heading1: 34, heading2: 28, heading3: 22, body: 16, bodySmall: 14, caption: 12 }`
+- `lineHeights`: `{ heading1: 46, heading2: 38, heading3: 30, body: 22, bodySmall: 20, caption: 16 }` (~1.35x ratio)
+
+### Spacing (4-point base scale)
+- `{ xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32, '3xl': 48, '4xl': 64 }`
+
+### BorderRadius
+- `{ small: 8, medium: 12, large: 16 }` — consistent with design-system.md 12–16px card corners
+
+### Layout
+- `MIN_TAP_TARGET = 44` (Apple HIG 44x44pt minimum)
+
+All nested objects must be individually `Object.freeze()`'d. Export type aliases: `TypographyType`, `SpacingType`, `BorderRadiusType`.
 
 ## Acceptance Criteria
-- [ ] `MetricUnit` string union type exported with all 9 unit values
-- [ ] `MetricCategory` string union type exported with 4 categories
-- [ ] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
-- [ ] `MetricDefinition` interface exported with all required fields: id, displayName, unit, healthKitIdentifier, normRanges (NormRange | null), category, heartScoreWeight, bpCompositeGroup
-- [ ] All existing types remain unchanged and exported
-- [ ] Strict TypeScript — no `any`, no implicit types
+- [ ] `constants/theme.ts` exports a typed `Typography` object with SF Pro font family (`'System'`), weight variants (regular='400', medium='500', semibold='600', bold='700'), font sizes for heading1 (34), heading2 (28), heading3 (22), body (16), bodySmall (14), caption (12), and corresponding line heights
+- [ ] Exports a typed `Spacing` object: xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
+- [ ] Exports a typed `BorderRadius` object: small=8, medium=12, large=16
+- [ ] All exports use `as const` assertions for literal type safety
+- [ ] All objects are `Object.freeze()`'d (including nested objects) following `colors.ts` pattern
+- [ ] Exports `MIN_TAP_TARGET = 44` constant per Apple HIG
+- [ ] Type aliases exported for each token group
 
 ## Test Cases
 
-> Issue #19 — Extend `types/health.ts` with `MetricDefinition` and related types
-
-These are TypeScript compilation / type-level tests. Because this issue adds only type declarations (no runtime logic), tests are authored as `tsc`-checked type assertions using `expectType` helpers (e.g. `ts-expect-error` directives and assignability checks). They run via `tsc --noEmit` in CI.
-
 ### Happy Path
-
-- [ ] `MetricUnit` accepts all 9 valid string literals — assign each value (`'bpm'`, `'mmHg'`, `'ms'`, `'mmol/L'`, `'kg'`, `'hours'`, `'count'`, `'minutes'`, `'mL/kg/min'`) to a `MetricUnit` variable without compiler error
-- [ ] `MetricCategory` accepts all 4 valid string literals — assign `'cardiac-function'`, `'risk-markers'`, `'lifestyle'`, `'trend-only'` to a `MetricCategory` variable without compiler error
-- [ ] A fully-populated `MetricDefinition` object compiles — construct an object with all required fields (`id`, `displayName`, `unit`, `healthKitIdentifier`, `normRanges`, `category`, `heartScoreWeight`) and optional `bpCompositeGroup`; expect no `tsc` errors
-- [ ] `normRanges: null` is valid — a `MetricDefinition` with `normRanges: null` (trend-only metric like weight) compiles without error
-- [ ] `NormRange` shape is valid — construct `{ green: { min: 60, max: 100 }, yellow: { min: 50, max: 110 }, red: { min: 0, max: 300 } }` and assign to `NormRange` without error
+- [ ] `Typography` exported from `constants/theme.ts` has `fontFamily === 'System'`, weight `regular === '400'`, `medium === '500'`, `semibold === '600'`, `bold === '700'`
+- [ ] `Typography.sizes` contains exact values: `heading1=34`, `heading2=28`, `heading3=22`, `body=16`, `bodySmall=14`, `caption=12`
+- [ ] `Spacing` exported from `constants/theme.ts` contains exact values: `xs=4`, `sm=8`, `md=12`, `lg=16`, `xl=24`, `2xl=32`, `3xl=48`, `4xl=64`
+- [ ] `BorderRadius` exported from `constants/theme.ts` contains `small=8`, `medium=12`, `large=16`
+- [ ] `MIN_TAP_TARGET` is exported and equals `44`
 
 ### Edge Cases
-
-- [ ] `MetricUnit` rejects unknown units — `'lbs'` assigned to `MetricUnit` produces a `@ts-expect-error` compiler diagnostic (type guard: only the 9 specified values are valid)
-- [ ] `MetricCategory` rejects unknown categories — `'unknown-category'` assigned to `MetricCategory` produces a `@ts-expect-error` diagnostic
-- [ ] `MetricDefinition` with missing required field fails — omitting `heartScoreWeight` from a `MetricDefinition` object produces a `@ts-expect-error` diagnostic
-- [ ] Existing types are unchanged — `MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading` are still exported; constructing valid instances of each compiles without error (regression guard)
+- [ ] All nested objects (`Typography.weights`, `Typography.sizes`, `Typography.lineHeights`, `Spacing`, `BorderRadius`) are frozen — `Object.isFrozen()` returns `true` for each
+- [ ] Attempting to mutate a token at runtime (e.g. `Spacing.xs = 999`) does not change the value (freeze enforcement in strict mode throws; non-strict silently ignores)
+- [ ] `Typography.lineHeights` values follow ~1.35x ratio: `heading1=46`, `heading2=38`, `heading3=30`, `body=22`, `bodySmall=20`, `caption=16`
 
 ### Mocking Strategy
-
-- **HealthKit:** Not applicable — this issue is pure type declarations; no runtime HealthKit calls involved
-- **Navigation:** Not applicable — no components or screens are modified
-- **Storage:** Not applicable — no DB schema changes in this issue
-
-### Notes
-
-All tests live in `types/__tests__/health.test-d.ts` (type-only test file, `.test-d.ts` convention). Run as part of `npm test` via `tsc --noEmit` (already configured in `bug-check.yml`). No Jest runtime assertions needed — type-level correctness is the only acceptance criterion.
+- HealthKit: not applicable — this is a pure constants file with no HealthKit dependency
+- Navigation: not applicable — no navigation dependency
+- Storage: not applicable — no DB dependency
+- TypeScript: run `tsc --noEmit` to verify type aliases (`TypographyType`, `SpacingType`, `BorderRadiusType`) resolve correctly and that `as const` assertions produce literal types (e.g. `Spacing.xs` is type `4`, not `number`)
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
