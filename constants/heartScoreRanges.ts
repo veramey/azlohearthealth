@@ -29,3 +29,18 @@ export const HEART_SCORE_CURVES: Partial<Record<MetricType, ScoreBreakpoint[]>> 
     { value: 45, score: 100 },
   ],
 };
+
+/**
+ * VO2 Max simplified linear scoring curve (mL/kg/min → sub-score).
+ *
+ * Spans 20–60 mL/kg/min → 0–100 sub-score.
+ * Age/sex percentile tables are post-MVP; this is a flat age-independent scale.
+ * Breakpoints are sorted ascending by value.
+ */
+export const VO2_MAX_SCORE_CURVE: readonly ScoreBreakpoint[] = [
+  { value: 20, score: 0 },
+  { value: 30, score: 25 },
+  { value: 40, score: 50 },
+  { value: 50, score: 75 },
+  { value: 60, score: 100 },
+] as const;

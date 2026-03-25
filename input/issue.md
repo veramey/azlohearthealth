@@ -1,61 +1,48 @@
-title:	Implement calculateHeartScore() service with weight redistribution
+title:	Define HeartScore types and VO2 max scoring constants
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
-comments:	0
+comments:	7
 assignees:	
 projects:	azloheart (In progress)
 milestone:	
-number:	36
+number:	35
 --
 Parent: #34
 
 See SPEC.md §5 Heart Score, §3 Data Model
 
-Implement the core `services/heartScore.ts` calculation service. Depends on types and constants from the previous sub-task.
+Create the foundational types and constants needed before implementing the calculation service.
 
-**Pillar weights:** Cardiac Function 40% (resting HR 15%, HRV 15%, VO2 max 10%), Risk Markers 35% (blood pressure 20%, blood glucose 15%), Lifestyle 25% (sleep 10%, steps 8%, workouts 7%).
+**Files to create:**
+- `types/heartScore.ts` — TypeScript types: `HeartScoreInput` (map of metric averages keyed by MetricType), `HeartScoreResult` (score: number | null, pillarScores: PillarBreakdown, perMetricSubScores: Record<MetricType, number>, metricsUsed: number, isInsufficient: boolean), `PillarBreakdown` (cardiac, riskMarkers, lifestyle — each with score and contributingMetrics)
+- `constants/heartScoreRanges.ts` — VO2 max relative scoring curve: simplified linear scale mapping 20–60 mL/kg/min → 0–100 sub-score (age/sex percentile tables are post-MVP)
 
-**Key implementation details:**
-- Generic `normalizeToScore(value, normRange, direction: 'higher' | 'lower')` function — clamps to 0–100, uses norm ranges from `constants/metrics.ts`
-- BP composite: average systolic and diastolic sub-scores into one 20%-weight metric; if only one is present, treat BP as missing
-- VO2 max: use `constants/heartScoreRanges.ts` curve instead of norm-based normalization
-- Weight redistribution: missing metrics give their weight to other metrics in the same pillar proportionally; if an entire pillar is missing, redistribute to remaining pillars proportionally
-- Return `null` score with `isInsufficient: true` when fewer than 2 metrics have data
-- Document in JSDoc that the caller is responsible for passing only 7-day averages excluding readings older than 30 days (stale filtering is NOT done here)
-- Use `heartScoreWeight` field from `constants/metrics.ts` as the single source of truth for weights — do not hardcode weight values
+No logic here — pure type definitions and static data.
 
 ## Acceptance Criteria
-- [ ] `calculateHeartScore(input: HeartScoreInput): HeartScoreResult` exported from `services/heartScore.ts`
-- [ ] Three-pillar weighted calculation matches the weights in SPEC.md §5 (Cardiac 40%, Risk 35%, Lifestyle 25%)
-- [ ] Missing metrics redistribute weight proportionally within the same pillar first, then across pillars
-- [ ] BP treated as missing if either systolic or diastolic is absent
-- [ ] VO2 max scored via relative curve, not norm ranges
-- [ ] Returns `{ score: null, isInsufficient: true }` when fewer than 2 metrics provided
-- [ ] Sub-scores clamped to 0–100 for values outside norm boundaries
-- [ ] Inverted metrics (resting HR, BP) score highest when in healthy range (lower values → higher score)
+- [ ] `HeartScoreInput` accepts all 8 scored metrics (resting_hr, hrv, vo2_max, bp_systolic, bp_diastolic, blood_glucose, sleep, steps, workouts) as optional fields
+- [ ] `HeartScoreResult` includes score, pillar breakdowns, per-metric sub-scores, metricsUsed count, and isInsufficient flag
+- [ ] `constants/heartScoreRanges.ts` exports VO2_MAX_SCORE_CURVE with at least 5 breakpoints spanning 20–60 mL/kg/min
+- [ ] All types are exported and importable by `services/heartScore.ts`
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `calculateHeartScore` returns a score between 0–100 when all 11 metrics are provided with valid 7-day averages
-- [ ] Three-pillar weights are correct: Cardiac Function contributes 40%, Risk Markers 35%, Lifestyle 25% to the total score (verify by providing only one pillar at a time and asserting proportional output)
-- [ ] BP composite score is correctly averaged from systolic and diastolic sub-scores, contributing 20% weight total
+- [ ] `HeartScoreInput` type accepts all 9 scored metrics as optional fields (`resting_hr`, `hrv`, `vo2_max`, `bp_systolic`, `bp_diastolic`, `blood_glucose`, `sleep`, `steps`, `workouts`) — verify TypeScript compiles with a partial object (e.g. only `resting_hr` provided)
+- [ ] `HeartScoreResult` type compiles with all required fields: `score: number | null`, `pillarScores: PillarBreakdown`, `perMetricSubScores`, `metricsUsed: number`, `isInsufficient: boolean`
+- [ ] `VO2_MAX_SCORE_CURVE` exported from `constants/heartScoreRanges.ts` contains at least 5 breakpoints and spans from 20 to 60 mL/kg/min with scores mapping 0–100
 
 ### Edge Cases
-- [ ] Returns `{ score: null, isInsufficient: true }` when only 1 metric is provided
-- [ ] Returns `{ score: null, isInsufficient: true }` when input is empty (`{}`)
-- [ ] Missing metric redistributes its weight proportionally to other metrics in the same pillar (e.g., HRV missing → resting HR and VO2 max absorb its 15% within Cardiac Function)
-- [ ] Entire Cardiac Function pillar missing → its 40% redistributes proportionally to Risk Markers and Lifestyle pillars
-- [ ] BP treated as missing when only systolic is present (diastolic absent), weight redistributed within Risk Markers pillar
-- [ ] Sub-scores clamp to 100 for values far below norms on inverted metrics (e.g., resting HR of 10 bpm → score 100, not above 100)
-- [ ] Sub-scores clamp to 0 for values far above norms on inverted metrics (e.g., resting HR of 300 bpm → score 0)
+- [ ] `HeartScoreInput` with no fields provided (empty object `{}`) satisfies the type — all fields are optional, not required
+- [ ] `VO2_MAX_SCORE_CURVE` boundary values are correct: breakpoint at 20 mL/kg/min maps to sub-score 0 and breakpoint at 60 mL/kg/min maps to sub-score 100
+- [ ] `HeartScoreResult` allows `score: null` (represents insufficient data case) without TypeScript error
 
 ### Mocking Strategy
-- **HealthKit:** Not applicable — `services/heartScore.ts` is a pure calculation function; no HealthKit calls
-- **Constants:** Import real `constants/metrics.ts` and `constants/heartScoreRanges.ts` in tests — do not mock, since the AC requires using `heartScoreWeight` as the single source of truth
-- **Navigation:** Not applicable — service layer only
-- **Storage:** Not applicable — service layer only; caller is responsible for passing pre-filtered 7-day averages
+- HealthKit: not applicable — this sub-issue is pure types and constants, no runtime HealthKit calls
+- Navigation: not applicable — no UI or navigation involved
+- Storage: not applicable — no DB reads/writes involved
+- Test approach: use TypeScript type-checking tests (`tsc --noEmit`) to validate type correctness; use simple Jest unit tests to assert shape and values of the `VO2_MAX_SCORE_CURVE` constant (breakpoint count, min/max values, score range)
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
