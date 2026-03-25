@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "HeartHealth",
+    "slug": "heart-health",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "heart-health",
+    "ios": {
+      "supportsTablet": false,
+      "deploymentTarget": "16.0",
+      "bundleIdentifier": "com.yourorg.hearthealth",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app reads your health data to display heart health metrics and trends.",
+        "NSHealthUpdateUsageDescription": "This app writes health data to track your heart health goals and progress."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourorg.hearthealth"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-router",
+      [
+        "react-native-health",
+        {
+          "isClinicalDataEnabled": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
