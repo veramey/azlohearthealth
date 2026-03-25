@@ -104,7 +104,7 @@ jobs:
         run: |
           CONTEXT=$(cat .claude/agents/common/project-context.md)
           AGENT_PROMPT=$(cat .claude/agents/breakdown.md)
-          claude --dangerously-skip-permissions --model claude-opus-4-6 -p "
+          claude --dangerously-skip-permissions --model claude-sonnet-4-6 -p "
           # Project Context
           $CONTEXT
 
