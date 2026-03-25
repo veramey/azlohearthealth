@@ -1,35 +1,31 @@
-# Issue #16 — Verify constants/colors.ts matches SPEC.md
+# Issue #19 — Extend types/health.ts with MetricDefinition and related types
 
-## Status: No changes required
+## Status: Complete
 
-All hex values in `constants/colors.ts` already match SPEC.md §7.2 and §8.5 exactly:
+Extended `types/health.ts` with all required types and added compile-time tests.
 
-| Key | Expected | Actual |
-|-----|----------|--------|
-| `background.primary` | `#0D0D0D` | `#0D0D0D` ✓ |
-| `background.surface` | `#1A1A1A` | `#1A1A1A` ✓ |
-| `text.primary` | `#FFFFFF` | `#FFFFFF` ✓ |
-| `text.secondary` | `#A1A1AA` | `#A1A1AA` ✓ |
-| `norm.green` | `#22C55E` | `#22C55E` ✓ |
-| `norm.yellow` | `#EAB308` | `#EAB308` ✓ |
-| `norm.red` | `#EF4444` | `#EF4444` ✓ |
-| `heartScore.excellent` | `#22C55E` | `#22C55E` ✓ |
-| `heartScore.good` | `#84CC16` | `#84CC16` ✓ |
-| `heartScore.fair` | `#EAB308` | `#EAB308` ✓ |
-| `heartScore.needsAttention` | `#F97316` | `#F97316` ✓ |
-| `heartScore.atRisk` | `#EF4444` | `#EF4444` ✓ |
+## Changes
 
-## Implementation verified
+### `types/health.ts`
+Added 5 new exported types (all existing types unchanged):
 
-- `Object.freeze()` applied to all nested objects (immutability)
-- `as const` applied — TypeScript infers literal types, not `string`
-- `ColorsType` exported for downstream usage
-- Shared base constants (`_green`, `_yellow`, `_red`) prevent duplication
-- `constants/__tests__/colors.test.ts` covers all AC: value assertions, shared base values, immutability, and key uniqueness
-- `constants/__tests__/colors.test-d.ts` covers compile-time literal type assertions
+- `MetricUnit` — string union with 9 unit values (`'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`)
+- `MetricCategory` — string union with 4 categories (`'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`)
+- `NormRange` — interface with `green`, `yellow`, `red` sub-objects each typed `{ min: number; max: number }`
+- `HeartScoreConfig` — interface with `weight: number` and optional `bpCompositeGroup?: string`
+- `MetricDefinition` — full metric entry interface with all required fields
 
-## Files
+### `types/__tests__/health.test-d.ts`
+Added compile-time type assertions covering:
 
-- `constants/colors.ts` — no changes needed
-- `constants/__tests__/colors.test.ts` — no changes needed
-- `constants/__tests__/colors.test-d.ts` — no changes needed
+- Happy path: all 9 `MetricUnit` literals, all 4 `MetricCategory` literals, valid `NormRange`, fully-populated `MetricDefinition`, `normRanges: null` (trend-only)
+- Edge cases: `@ts-expect-error` for `'lbs'` as `MetricUnit`, `'unknown-category'` as `MetricCategory`, `MetricDefinition` missing `heartScoreWeight`
+
+## Acceptance Criteria
+
+- [x] `MetricUnit` string union exported with all 9 unit values
+- [x] `MetricCategory` string union exported with 4 categories
+- [x] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
+- [x] `MetricDefinition` interface exported with all required fields
+- [x] All existing types remain unchanged and exported
+- [x] Strict TypeScript — no `any`, no implicit types

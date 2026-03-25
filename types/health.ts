@@ -36,3 +36,42 @@ export interface BloodPressureReading {
   timestamp: Date;
   source: ReadingSource;
 }
+
+export type MetricUnit =
+  | 'bpm'
+  | 'mmHg'
+  | 'ms'
+  | 'mmol/L'
+  | 'kg'
+  | 'hours'
+  | 'count'
+  | 'minutes'
+  | 'mL/kg/min';
+
+export type MetricCategory =
+  | 'cardiac-function'
+  | 'risk-markers'
+  | 'lifestyle'
+  | 'trend-only';
+
+export interface NormRange {
+  green: { min: number; max: number };
+  yellow: { min: number; max: number };
+  red: { min: number; max: number };
+}
+
+export interface HeartScoreConfig {
+  weight: number;
+  bpCompositeGroup?: string;
+}
+
+export interface MetricDefinition {
+  id: MetricType;
+  displayName: string;
+  unit: MetricUnit;
+  healthKitIdentifier: string;
+  normRanges: NormRange | null;
+  category: MetricCategory;
+  heartScoreWeight: number;
+  bpCompositeGroup?: string;
+}
