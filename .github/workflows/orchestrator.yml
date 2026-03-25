@@ -68,9 +68,6 @@ jobs:
             echo "Rolled back from refined"
           fi
 
-          # Move back on board
-          chmod +x scripts/update-project-status.sh 2>/dev/null || true
-          ./scripts/update-project-status.sh "$ISSUE" "Backlog" 2>/dev/null || true
 
           gh issue comment $ISSUE --repo $REPO \
             --body "**Orchestrator: Rolled back** — issue needs clarification before proceeding.

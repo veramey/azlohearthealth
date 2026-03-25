@@ -55,7 +55,7 @@ jobs:
 
           echo "PR_NUMBER=$PR" >> $GITHUB_ENV
 
-      - name: Move issue to Done
+      - name: Close issue
         if: env.PR_NUMBER != ''
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -64,10 +64,6 @@ jobs:
           ISSUE_NUMBER=$(echo "$BRANCH" | grep -oE '[0-9]+$')
 
           if [ -n "$ISSUE_NUMBER" ]; then
-            chmod +x scripts/update-project-status.sh
-            ./scripts/update-project-status.sh "$ISSUE_NUMBER" "Done" || true
-
-            # Close the issue
             gh issue close "$ISSUE_NUMBER" \
               --repo ${{ github.repository }} \
               --reason completed 2>/dev/null || true

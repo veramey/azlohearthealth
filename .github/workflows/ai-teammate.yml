@@ -65,13 +65,12 @@ jobs:
           git config --global user.name "AI Teammate"
           git config --global user.email "agent.ai.native@gmail.com"
 
-      - name: Move issue to In Development
+      - name: Add issue to project board
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          chmod +x scripts/add-to-project.sh scripts/update-project-status.sh
-          ./scripts/add-to-project.sh ${{ steps.issue.outputs.number }} "In Development" || true
-          ./scripts/update-project-status.sh ${{ steps.issue.outputs.number }} "In Development" || true
+          chmod +x scripts/add-to-project.sh
+          ./scripts/add-to-project.sh ${{ steps.issue.outputs.number }} || true
 
       - name: Fetch GitHub Issue
         env:
@@ -181,9 +180,3 @@ jobs:
             --base main \
             --head $BRANCH || true
 
-      - name: Move issue to Ready for QA
-        if: steps.existing_pr.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          ./scripts/update-project-status.sh ${{ steps.issue.outputs.number }} "Ready for QA" || true

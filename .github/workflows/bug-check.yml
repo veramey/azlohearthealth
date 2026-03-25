@@ -56,16 +56,6 @@ jobs:
           gh label create "needs-rework" --color "e4e669" --description "Code review issues to fix" \
             --repo ${{ github.repository }} 2>/dev/null || true
 
-      - name: Move issue to In QA
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          ISSUE_NUM=$(echo "${{ github.head_ref }}" | grep -oE '[0-9]+$' || echo "")
-          if [ -n "$ISSUE_NUM" ]; then
-            chmod +x scripts/update-project-status.sh
-            ./scripts/update-project-status.sh "$ISSUE_NUM" "In QA" || true
-          fi
-
       - name: Fetch PR diff
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}

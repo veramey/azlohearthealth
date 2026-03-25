@@ -103,8 +103,4 @@ jobs:
             --repo ${{ github.repository }} \
             --add-label "design-done"
 
-          # Move on project board — design is done, ready for development
-          chmod +x scripts/update-project-status.sh
-          ./scripts/update-project-status.sh ${{ github.event.issue.number }} "Ready for Development" || true
-
           echo "Design requirements added and labeled design-done"

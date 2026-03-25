@@ -92,6 +92,36 @@ jobs:
 
           cat input/pipeline_context.md
 
+      - name: Reconcile board statuses
+        if: steps.precheck.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          chmod +x scripts/reconcile-board-status.sh scripts/update-project-status.sh
+
+          # Reconcile all open issues
+          gh issue list \
+            --repo ${{ github.repository }} \
+            --state open \
+            --json number --jq '.[].number' \
+            | while read -r NUM; do
+              echo "--- Reconciling issue #$NUM ---"
+              ./scripts/reconcile-board-status.sh "$NUM" || echo "Failed to reconcile #$NUM — continuing"
+            done
+
+          # Also reconcile recently closed issues (last 24h) that may have stale board status
+          gh issue list \
+            --repo ${{ github.repository }} \
+            --state closed \
+            --json number,closedAt \
+            --jq "[.[] | select((.closedAt | fromdateiso8601) > (now - 86400))] | .[].number" \
+            | while read -r NUM; do
+              echo "--- Reconciling closed issue #$NUM ---"
+              ./scripts/reconcile-board-status.sh "$NUM" || echo "Failed to reconcile #$NUM — continuing"
+            done
+
       - name: Run Claude — analyze and act
         if: steps.precheck.outputs.proceed == 'true'
         env:
