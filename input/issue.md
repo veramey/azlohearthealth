@@ -1,4 +1,4 @@
-title:	Add runtime and compile-time tests for constants/theme.ts
+title:	Create constants/metrics.ts with all 12 metric definitions
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
@@ -6,67 +6,54 @@ comments:	0
 assignees:	
 projects:	azloheart (Backlog)
 milestone:	
-number:	27
+number:	30
 --
-Parent: #25
+Parent: #18
 
-See SPEC.md §7.2 (Visual Direction)
+## Description
 
-Depends on: `constants/theme.ts` from previous sub-task.
+`constants/metrics.ts` was never created despite sub-issue #20 being closed. This file must be created to satisfy AC1–AC4 of the parent issue.
 
-Create two test files following the pattern established by `constants/__tests__/colors.test.ts` and `constants/__tests__/colors.test-d.ts`.
+Create `constants/metrics.ts` exporting a `METRICS: Record<MetricType, MetricDefinition>` constant with all 12 entries (11 metrics, BP split into systolic + diastolic). Follow the existing pattern from `constants/colors.ts`: use `Object.freeze()` and `as const` for immutability.
 
-### Runtime tests (`constants/__tests__/theme.test.ts`)
-- All Typography values match expected: fontFamily='System', sizes (34/28/22/16/14/12), lineHeights (46/38/30/22/20/16), weights ('400'/'500'/'600'/'700')
-- All Spacing values match expected: xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
-- All BorderRadius values match expected: small=8, medium=12, large=16
-- `Object.isFrozen()` assertions on all exported objects AND all nested objects
-- Mutation throws in strict mode (matching colors.test.ts pattern)
-- Spacing values are strictly ascending (each value > previous)
-- Every line height is greater than its corresponding font size
-- Font weights are valid React Native fontWeight strings
-- `MIN_TAP_TARGET` equals 44
-- No duplicate keys within groups
+For each metric entry include:
+- `id` — matches the `MetricType` key
+- `displayName` — human-readable name
+- `unit` — typed `MetricUnit` value
+- `healthKitIdentifier` — react-native-health identifier string
+- `normRanges` — green/yellow/red thresholds from SPEC.md §3 and §8.3, or `null` for trend-only metrics (weight, vo2_max, walking_hr_avg)
+- `category` — one of `cardiac-function`, `risk-markers`, `lifestyle`, `trend-only`
+- `heartScoreWeight` — resting HR 15, HRV 15, VO2 max 10, BP systolic 10, BP diastolic 10, glucose 15, sleep 10, steps 8, workouts 7; 0 for heart_rate, weight, walking_hr_avg
+- `bpCompositeGroup` — `'blood_pressure'` for systolic and diastolic entries, undefined for others
 
-### Compile-time type tests (`constants/__tests__/theme.test-d.ts`)
-- Literal type preservation: `Typography.sizes.body` is type `16` not `number`
-- `Spacing.md` is type `12` not `number`
-- `BorderRadius.medium` is type `12` not `number`
-- `@ts-expect-error` for assigning wrong literal values to verify const narrowing
+All types are already available in `types/health.ts`.
 
 ## Acceptance Criteria
-- [ ] `constants/__tests__/theme.test.ts` exists with runtime Jest tests covering all token values, immutability, scale progression, and line height invariants
-- [ ] `constants/__tests__/theme.test-d.ts` exists with compile-time type tests verifying literal type preservation via `@ts-expect-error`
-- [ ] All tests pass with `npm test`
-- [ ] Test structure follows the same describe/it pattern as `colors.test.ts`
+- [ ] `constants/metrics.ts` file exists and exports `METRICS: Record<MetricType, MetricDefinition>`
+- [ ] METRICS record has exactly 12 entries — one per MetricType
+- [ ] Heart Score weights sum to 100 across the 8 scored metrics
+- [ ] Trend-only metrics (weight, vo2_max, walking_hr_avg) have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] BP systolic and diastolic both have `bpCompositeGroup: 'blood_pressure'` set
+- [ ] All normRanges (when not null) have green, yellow, red with `min <= max`
+- [ ] Yellow ranges border green ranges (no gaps, no overlaps)
+- [ ] File uses `Object.freeze()` and `as const` for immutability
 
 ## Test Cases
 
 ### Happy Path
-
-- [ ] `Typography` values match expected: `fontFamily` is `'System'`, sizes are `{ largeTitle: 34, title: 28, title2: 22, body: 16, subheadline: 14, caption: 12 }`, lineHeights are `{ largeTitle: 46, title: 38, title2: 30, body: 22, subheadline: 20, caption: 16 }`, weights are `{ regular: '400', medium: '500', semibold: '600', bold: '700' }`
-- [ ] `Spacing` values match expected: `{ xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32, '3xl': 48, '4xl': 64 }`
-- [ ] `BorderRadius` values match expected: `{ small: 8, medium: 12, large: 16 }`
-- [ ] `MIN_TAP_TARGET` equals `44`
-- [ ] All exported objects and their nested objects are frozen (`Object.isFrozen()` returns `true` for `Typography`, `Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
+- [ ] `METRICS` export has exactly 12 keys matching all `MetricType` values
+- [ ] Heart Score weights (`heartScoreWeight`) across all entries sum to exactly 100
+- [ ] Each entry with non-null `normRanges` has all three thresholds (green, yellow, red) where `min <= max`
 
 ### Edge Cases
-
-- [ ] Mutation of a frozen nested object (e.g. `Typography.sizes.body = 99`) throws a `TypeError` in strict mode, matching the `colors.test.ts` pattern
-- [ ] Spacing values are strictly ascending: each value in `[xs, sm, md, lg, xl, '2xl', '3xl', '4xl']` is greater than the previous
-- [ ] Every `Typography.lineHeight` is strictly greater than its corresponding `Typography.sizes` value (e.g. `lineHeights.body (22) > sizes.body (16)`)
-- [ ] Each `Typography.weights` value is a valid React Native `fontWeight` string (one of `'100'`–`'900'`, `'normal'`, `'bold'`)
-- [ ] No duplicate keys within each group (`Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
+- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] `bp_systolic` and `bp_diastolic` both have `bpCompositeGroup: 'blood_pressure'`; all other entries have `bpCompositeGroup: undefined`
+- [ ] Yellow ranges are contiguous with green ranges — no gaps and no overlaps between yellow.max and green.min (or green.max and yellow.min) for every metric with normRanges
 
 ### Mocking Strategy
-
-- HealthKit: not applicable — this is a constants-only module with no HealthKit dependency
-- Navigation: not applicable — no expo-router usage
-- Storage: not applicable — no local DB usage; import `constants/theme` directly in tests
-
----
-
-> Note: the compile-time test file (`theme.test-d.ts`) requires no runtime mocking. It relies solely on TypeScript's `tsc --noEmit` to verify that `as const` preserves literal types (`Typography.sizes.body` is `16`, not `number`; `Spacing.md` is `12`, not `number`; `BorderRadius.medium` is `12`, not `number`) and that `@ts-expect-error` correctly rejects wrong literal assignments.
+- HealthKit: none needed — this is a pure constants file with no runtime HealthKit calls
+- Navigation: none needed
+- Storage: none needed — import `METRICS` directly and assert on its shape
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
