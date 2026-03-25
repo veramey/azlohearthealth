@@ -1,65 +1,72 @@
-title:	Extend types/health.ts with MetricDefinition and related types
+title:	Add runtime and compile-time tests for constants/theme.ts
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
 comments:	0
 assignees:	
-projects:	azloheart (In Development)
+projects:	azloheart (Backlog)
 milestone:	
-number:	19
+number:	27
 --
-Parent: #18
+Parent: #25
 
-See SPEC.md §3 (Data Model), §8.2 (Heart Score Architecture)
+See SPEC.md §7.2 (Visual Direction)
 
-Extend the existing `types/health.ts` file with the types needed by `constants/metrics.ts`:
+Depends on: `constants/theme.ts` from previous sub-task.
 
-- `MetricUnit` — string union: `'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`
-- `MetricCategory` — string union: `'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`
-- `NormRange` — object with `green`, `yellow`, `red` sub-objects each containing `{ min: number; max: number }`
-- `HeartScoreConfig` — object with `weight: number` (0–100) and optional `bpCompositeGroup?: string`
-- `MetricDefinition` — full metric entry: `id: MetricType`, `displayName: string`, `unit: MetricUnit`, `healthKitIdentifier: string`, `normRanges: NormRange | null`, `category: MetricCategory`, `heartScoreWeight: number`, `bpCompositeGroup?: string`
+Create two test files following the pattern established by `constants/__tests__/colors.test.ts` and `constants/__tests__/colors.test-d.ts`.
 
-Keep all existing types (`MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading`) unchanged.
+### Runtime tests (`constants/__tests__/theme.test.ts`)
+- All Typography values match expected: fontFamily='System', sizes (34/28/22/16/14/12), lineHeights (46/38/30/22/20/16), weights ('400'/'500'/'600'/'700')
+- All Spacing values match expected: xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
+- All BorderRadius values match expected: small=8, medium=12, large=16
+- `Object.isFrozen()` assertions on all exported objects AND all nested objects
+- Mutation throws in strict mode (matching colors.test.ts pattern)
+- Spacing values are strictly ascending (each value > previous)
+- Every line height is greater than its corresponding font size
+- Font weights are valid React Native fontWeight strings
+- `MIN_TAP_TARGET` equals 44
+- No duplicate keys within groups
+
+### Compile-time type tests (`constants/__tests__/theme.test-d.ts`)
+- Literal type preservation: `Typography.sizes.body` is type `16` not `number`
+- `Spacing.md` is type `12` not `number`
+- `BorderRadius.medium` is type `12` not `number`
+- `@ts-expect-error` for assigning wrong literal values to verify const narrowing
 
 ## Acceptance Criteria
-- [ ] `MetricUnit` string union type exported with all 9 unit values
-- [ ] `MetricCategory` string union type exported with 4 categories
-- [ ] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
-- [ ] `MetricDefinition` interface exported with all required fields: id, displayName, unit, healthKitIdentifier, normRanges (NormRange | null), category, heartScoreWeight, bpCompositeGroup
-- [ ] All existing types remain unchanged and exported
-- [ ] Strict TypeScript — no `any`, no implicit types
+- [ ] `constants/__tests__/theme.test.ts` exists with runtime Jest tests covering all token values, immutability, scale progression, and line height invariants
+- [ ] `constants/__tests__/theme.test-d.ts` exists with compile-time type tests verifying literal type preservation via `@ts-expect-error`
+- [ ] All tests pass with `npm test`
+- [ ] Test structure follows the same describe/it pattern as `colors.test.ts`
 
 ## Test Cases
 
-> Issue #19 — Extend `types/health.ts` with `MetricDefinition` and related types
-
-These are TypeScript compilation / type-level tests. Because this issue adds only type declarations (no runtime logic), tests are authored as `tsc`-checked type assertions using `expectType` helpers (e.g. `ts-expect-error` directives and assignability checks). They run via `tsc --noEmit` in CI.
-
 ### Happy Path
 
-- [ ] `MetricUnit` accepts all 9 valid string literals — assign each value (`'bpm'`, `'mmHg'`, `'ms'`, `'mmol/L'`, `'kg'`, `'hours'`, `'count'`, `'minutes'`, `'mL/kg/min'`) to a `MetricUnit` variable without compiler error
-- [ ] `MetricCategory` accepts all 4 valid string literals — assign `'cardiac-function'`, `'risk-markers'`, `'lifestyle'`, `'trend-only'` to a `MetricCategory` variable without compiler error
-- [ ] A fully-populated `MetricDefinition` object compiles — construct an object with all required fields (`id`, `displayName`, `unit`, `healthKitIdentifier`, `normRanges`, `category`, `heartScoreWeight`) and optional `bpCompositeGroup`; expect no `tsc` errors
-- [ ] `normRanges: null` is valid — a `MetricDefinition` with `normRanges: null` (trend-only metric like weight) compiles without error
-- [ ] `NormRange` shape is valid — construct `{ green: { min: 60, max: 100 }, yellow: { min: 50, max: 110 }, red: { min: 0, max: 300 } }` and assign to `NormRange` without error
+- [ ] `Typography` values match expected: `fontFamily` is `'System'`, sizes are `{ largeTitle: 34, title: 28, title2: 22, body: 16, subheadline: 14, caption: 12 }`, lineHeights are `{ largeTitle: 46, title: 38, title2: 30, body: 22, subheadline: 20, caption: 16 }`, weights are `{ regular: '400', medium: '500', semibold: '600', bold: '700' }`
+- [ ] `Spacing` values match expected: `{ xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32, '3xl': 48, '4xl': 64 }`
+- [ ] `BorderRadius` values match expected: `{ small: 8, medium: 12, large: 16 }`
+- [ ] `MIN_TAP_TARGET` equals `44`
+- [ ] All exported objects and their nested objects are frozen (`Object.isFrozen()` returns `true` for `Typography`, `Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
 
 ### Edge Cases
 
-- [ ] `MetricUnit` rejects unknown units — `'lbs'` assigned to `MetricUnit` produces a `@ts-expect-error` compiler diagnostic (type guard: only the 9 specified values are valid)
-- [ ] `MetricCategory` rejects unknown categories — `'unknown-category'` assigned to `MetricCategory` produces a `@ts-expect-error` diagnostic
-- [ ] `MetricDefinition` with missing required field fails — omitting `heartScoreWeight` from a `MetricDefinition` object produces a `@ts-expect-error` diagnostic
-- [ ] Existing types are unchanged — `MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading` are still exported; constructing valid instances of each compiles without error (regression guard)
+- [ ] Mutation of a frozen nested object (e.g. `Typography.sizes.body = 99`) throws a `TypeError` in strict mode, matching the `colors.test.ts` pattern
+- [ ] Spacing values are strictly ascending: each value in `[xs, sm, md, lg, xl, '2xl', '3xl', '4xl']` is greater than the previous
+- [ ] Every `Typography.lineHeight` is strictly greater than its corresponding `Typography.sizes` value (e.g. `lineHeights.body (22) > sizes.body (16)`)
+- [ ] Each `Typography.weights` value is a valid React Native `fontWeight` string (one of `'100'`–`'900'`, `'normal'`, `'bold'`)
+- [ ] No duplicate keys within each group (`Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
 
 ### Mocking Strategy
 
-- **HealthKit:** Not applicable — this issue is pure type declarations; no runtime HealthKit calls involved
-- **Navigation:** Not applicable — no components or screens are modified
-- **Storage:** Not applicable — no DB schema changes in this issue
+- HealthKit: not applicable — this is a constants-only module with no HealthKit dependency
+- Navigation: not applicable — no expo-router usage
+- Storage: not applicable — no local DB usage; import `constants/theme` directly in tests
 
-### Notes
+---
 
-All tests live in `types/__tests__/health.test-d.ts` (type-only test file, `.test-d.ts` convention). Run as part of `npm test` via `tsc --noEmit` (already configured in `bug-check.yml`). No Jest runtime assertions needed — type-level correctness is the only acceptance criterion.
+> Note: the compile-time test file (`theme.test-d.ts`) requires no runtime mocking. It relies solely on TypeScript's `tsc --noEmit` to verify that `as const` preserves literal types (`Typography.sizes.body` is `16`, not `number`; `Spacing.md` is `12`, not `number`; `BorderRadius.medium` is `12`, not `number`) and that `@ts-expect-error` correctly rejects wrong literal assignments.
 
 ---
 _Test cases generated by QA Agent (Claude Code)_

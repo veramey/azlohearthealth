@@ -1,31 +1,33 @@
-# Issue #19 — Extend types/health.ts with MetricDefinition and related types
+# Issue #27 — Theme Constants Tests
 
 ## Status: Complete
 
-Extended `types/health.ts` with all required types and added compile-time tests.
+Created `constants/theme.ts` and both test files following the established colors pattern.
 
 ## Changes
 
-### `types/health.ts`
-Added 5 new exported types (all existing types unchanged):
+### `constants/theme.ts`
+Theme constant module exporting `Typography`, `Spacing`, `BorderRadius`, and `MIN_TAP_TARGET`. All objects are deeply frozen with `as const` literal types.
 
-- `MetricUnit` — string union with 9 unit values (`'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`)
-- `MetricCategory` — string union with 4 categories (`'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`)
-- `NormRange` — interface with `green`, `yellow`, `red` sub-objects each typed `{ min: number; max: number }`
-- `HeartScoreConfig` — interface with `weight: number` and optional `bpCompositeGroup?: string`
-- `MetricDefinition` — full metric entry interface with all required fields
+### `constants/__tests__/theme.test.ts`
+Runtime Jest tests covering:
+- All token values (Typography fontFamily, sizes, lineHeights, weights; Spacing; BorderRadius; MIN_TAP_TARGET)
+- `Object.isFrozen()` on all exported objects and nested objects
+- Mutation throws `TypeError` in strict mode
+- Spacing values are strictly ascending
+- Every line height is greater than its corresponding font size
+- Font weights are valid React Native `fontWeight` strings
+- No duplicate keys within any group
 
-### `types/__tests__/health.test-d.ts`
-Added compile-time type assertions covering:
-
-- Happy path: all 9 `MetricUnit` literals, all 4 `MetricCategory` literals, valid `NormRange`, fully-populated `MetricDefinition`, `normRanges: null` (trend-only)
-- Edge cases: `@ts-expect-error` for `'lbs'` as `MetricUnit`, `'unknown-category'` as `MetricCategory`, `MetricDefinition` missing `heartScoreWeight`
+### `constants/__tests__/theme.test-d.ts`
+Compile-time type tests verified by `tsc --noEmit`:
+- `Typography.sizes.body` is type `16`, not `number`
+- `Spacing.md` is type `12`, not `number`
+- `BorderRadius.medium` is type `12`, not `number`
+- `@ts-expect-error` confirms wrong literal assignments are rejected
 
 ## Acceptance Criteria
 
-- [x] `MetricUnit` string union exported with all 9 unit values
-- [x] `MetricCategory` string union exported with 4 categories
-- [x] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
-- [x] `MetricDefinition` interface exported with all required fields
-- [x] All existing types remain unchanged and exported
-- [x] Strict TypeScript — no `any`, no implicit types
+- [x] `constants/__tests__/theme.test.ts` exists with runtime Jest tests covering all token values, immutability, scale progression, and line height invariants
+- [x] `constants/__tests__/theme.test-d.ts` exists with compile-time type tests verifying literal type preservation via `@ts-expect-error`
+- [x] Test structure follows the same describe/it pattern as `colors.test.ts`
