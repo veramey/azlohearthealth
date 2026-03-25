@@ -1,36 +1,16 @@
 #!/usr/bin/env bash
-# update-project-status.sh ISSUE_NUMBER STATUS_NAME [--force]
-# Statuses: "Backlog" | "Ready for Architecture" | "Ready for Design" |
-#           "Ready for Development" | "In Development" | "Ready for QA" | "In QA" | "Done"
-#
-# Forward-only guard: skips if issue is already further in the pipeline.
-# Use --force for authoritative updates (reconciliation script).
+# update-project-status.sh ISSUE_NUMBER STATUS_NAME
+# Statuses: "Backlog" | "In progress" | "In review" | "Done"
 
 set -e
 
 ISSUE_NUMBER="$1"
 STATUS_NAME="$2"
-FORCE=false
-if [ "$3" = "--force" ]; then
-  FORCE=true
-fi
 OWNER="${GITHUB_REPOSITORY_OWNER}"
 PROJECT_TITLE="azloheart"
 
-# Pipeline order (index = rank)
-STATUS_ORDER=("Backlog" "Ready for Architecture" "Ready for Design" "Ready for Development" "In Development" "Ready for QA" "In QA" "Done")
-
-status_index() {
-  for i in "${!STATUS_ORDER[@]}"; do
-    if [ "${STATUS_ORDER[$i]}" = "$1" ]; then
-      echo "$i"; return
-    fi
-  done
-  echo "-1"
-}
-
 if [ -z "$ISSUE_NUMBER" ] || [ -z "$STATUS_NAME" ]; then
-  echo "Usage: update-project-status.sh ISSUE_NUMBER STATUS_NAME [--force]"
+  echo "Usage: update-project-status.sh ISSUE_NUMBER STATUS_NAME"
   exit 1
 fi
 
@@ -73,7 +53,7 @@ if [ -z "$OPTION_ID" ] || [ "$OPTION_ID" = "null" ]; then
   exit 0
 fi
 
-# Get issue node ID, project item ID, and current status
+# Get issue node ID and its project item ID
 ISSUE_DATA=$(gh api graphql -f query='
   query($owner: String!, $repo: String!, $number: Int!) {
     repository(owner: $owner, name: $repo) {
@@ -83,14 +63,6 @@ ISSUE_DATA=$(gh api graphql -f query='
           nodes {
             id
             project { id }
-            fieldValues(first: 10) {
-              nodes {
-                ... on ProjectV2ItemFieldSingleSelectValue {
-                  field { ... on ProjectV2SingleSelectField { name } }
-                  name
-                }
-              }
-            }
           }
         }
       }
@@ -103,24 +75,6 @@ ITEM_ID=$(echo "$ISSUE_DATA" | jq -r --arg pid "$PROJECT_ID" '.data.repository.i
 if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" = "null" ]; then
   echo "Issue #$ISSUE_NUMBER not found in project — skipping"
   exit 0
-fi
-
-# Forward-only guard
-if [ "$FORCE" = false ]; then
-  CURRENT_STATUS=$(echo "$ISSUE_DATA" | jq -r --arg pid "$PROJECT_ID" '
-    .data.repository.issue.projectItems.nodes[]
-    | select(.project.id == $pid)
-    | .fieldValues.nodes[]
-    | select(.field.name == "Status")
-    | .name // ""')
-
-  CURRENT_IDX=$(status_index "$CURRENT_STATUS")
-  TARGET_IDX=$(status_index "$STATUS_NAME")
-
-  if [ "$CURRENT_IDX" -ge "$TARGET_IDX" ] && [ "$CURRENT_IDX" -ge 0 ]; then
-    echo "Issue #$ISSUE_NUMBER already at '$CURRENT_STATUS' (rank $CURRENT_IDX) — skipping '$STATUS_NAME' (rank $TARGET_IDX)"
-    exit 0
-  fi
 fi
 
 # Update status

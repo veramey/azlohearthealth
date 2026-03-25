@@ -21,6 +21,13 @@ jobs:
         with:
           token: ${{ secrets.PAT_TOKEN }}
 
+      - name: Move closed issue to Done
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          chmod +x scripts/update-project-status.sh
+          ./scripts/update-project-status.sh "${{ github.event.issue.number }}" "Done" || true
+
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
@@ -148,4 +155,12 @@ jobs:
           Use PARENT_NUM=$PARENT_NUM and REPO=$REPO.
           Start by reading input/verify_context.md carefully.
           "
+
+      - name: Move parent to Done
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          chmod +x scripts/update-project-status.sh
+          ./scripts/update-project-status.sh "$PARENT_NUM" "Done" || true
 

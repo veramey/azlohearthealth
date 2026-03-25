@@ -93,6 +93,10 @@ jobs:
             gh issue edit $ISSUE --repo $REPO --add-label "blocked"
             gh issue edit $ISSUE --repo $REPO --remove-label "pipeline-error,retry-1,retry-2" 2>/dev/null || true
 
+            # Move to Blocked on project board
+            chmod +x scripts/update-project-status.sh 2>/dev/null || true
+            ./scripts/update-project-status.sh "$ISSUE" "Blocked" 2>/dev/null || true
+
             # Fix #10: Extract last failed workflow logs for diagnostic
             LAST_FAILED_RUN=$(gh run list --repo $REPO --limit 20 \
               --json databaseId,displayTitle,conclusion,url \

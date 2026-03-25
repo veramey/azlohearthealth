@@ -57,6 +57,13 @@ jobs:
             --remove-label "needs-rework" \
             --add-label "blocked" 2>/dev/null || true
 
+          # Move issue to Blocked on project board
+          ISSUE_NUM=$(echo "${{ github.head_ref }}" | grep -oE '[0-9]+$' || echo "")
+          if [ -n "$ISSUE_NUM" ]; then
+            chmod +x scripts/update-project-status.sh
+            ./scripts/update-project-status.sh "$ISSUE_NUM" "Blocked" || true
+          fi
+
           exit 1
 
       - name: Checkout repository

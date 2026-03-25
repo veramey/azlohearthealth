@@ -123,7 +123,16 @@ blocked
 
 ### Board Statuses
 
-`Backlog` → `Ready for Architecture` → `Ready for Design` (if needed) → `Ready for Development` → `In Development` → `Ready for QA` → `In QA` → `Done`
+`Backlog` → `In progress` → `In review` → `Done` (+ `Blocked`)
+
+Only 5 workflows touch the board, each writes only its own status:
+- **ai-teammate.yml** → `In progress` (start) → `In review` (PR created)
+- **merge-trigger.yml** → `Done` (after merge)
+- **close-parent-issue.yml** → `Done` (sub-issue closed / parent verified)
+- **orchestrator.yml** → `Blocked` (max retries exhausted)
+- **pr-rework.yml** → `Blocked` (3 failed rework attempts)
+
+All other workflows (intake, story-refinement, design-refinement, issue-breakdown, bug-check) manage labels only — they do NOT update the board.
 
 ### Labels
 
