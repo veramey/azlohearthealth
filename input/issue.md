@@ -1,59 +1,79 @@
-title:	Verify constants/colors.ts matches SPEC.md and ensure test coverage
+title:	Add unit tests and type tests for constants/metrics.ts
 state:	OPEN
 author:	veramey
-labels:	sub-issue, tests-ready
-comments:	0
+labels:	retry-1, sub-issue, tests-ready
+comments:	2
 assignees:	
 projects:	azloheart (In Development)
 milestone:	
-number:	16
+number:	21
 --
-Parent: #15
+Parent: #18
 
-See SPEC.md §7.2 Visual Direction, §8.5 Score Display
+See SPEC.md §8.2 (Heart Score Architecture)
 
-The `constants/colors.ts` file already exists with the full color palette, and `constants/__tests__/colors.test.ts` already covers all color values, shared base values, immutability, and key uniqueness. This sub-task verifies correctness against the spec and ensures all tests pass.
+Create test files to validate the metrics constants:
 
-### What to verify
-- All hex values in `constants/colors.ts` match SPEC.md §7.2 and §8.5 exactly
-- Background: primary (#0D0D0D), surface (#1A1A1A)
-- Norm indicators: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- Heart Score labels: excellent (#22C55E), good (#84CC16), fair (#EAB308), needsAttention (#F97316), atRisk (#EF4444)
-- Text: primary (#FFFFFF), secondary (#A1A1AA)
-- `ColorsType` is exported for downstream component usage
-- `as const` + `Object.freeze()` pattern is applied consistently
-- All existing tests in `constants/__tests__/colors.test.ts` pass via `npm test`
+**Unit tests (`constants/__tests__/metrics.test.ts`):**
+- `METRICS` has exactly 12 entries (one per `MetricType`)
+- Every `MetricType` value has a corresponding entry in `METRICS`
+- Heart Score weights of scored metrics sum to 100
+- Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
+- BP systolic and diastolic both have `bpCompositeGroup` set
+- All `normRanges` (when not null) have `green`, `yellow`, `red` with `min <= max`
+- Yellow ranges border green ranges (no gaps, no overlaps)
 
-### If any discrepancy is found
-- Fix the hex value in `constants/colors.ts` to match the spec
-- Update the corresponding test assertion
+**Type tests (`constants/__tests__/metrics.test-d.ts`):**
+- `METRICS['heart_rate']` is assignable to `MetricDefinition`
+- `METRICS` key type is exactly `MetricType` (no extra keys, no missing keys)
+- `normRanges` is `NormRange | null` (not optional/undefined)
+
+Follow the existing test pattern from `constants/__tests__/colors.test.ts` and `constants/__tests__/colors.test-d.ts`.
+
+Depends on: sub-tasks 1 and 2.
 
 ## Acceptance Criteria
-- [ ] File exists at `constants/colors.ts` and exports a typed color palette object
-- [ ] Background colors included: primary (#0D0D0D) and surface (#1A1A1A)
-- [ ] Norm indicator colors included: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- [ ] Heart Score label colors included: Excellent green (#22C55E), Good light-green (#84CC16), Fair yellow (#EAB308), Needs Attention orange (#F97316), At Risk red (#EF4444)
-- [ ] Text colors included: primary (white/light), secondary (light gray for labels)
-- [ ] All unit tests pass (`npm test -- constants/__tests__/colors.test.ts`)
+- [ ] Unit test file exists at `constants/__tests__/metrics.test.ts`
+- [ ] Type test file exists at `constants/__tests__/metrics.test-d.ts`
+- [ ] All unit tests pass with `npm test`
+- [ ] Type tests validate at compile time with `tsc --noEmit`
+- [ ] Heart Score weight sum invariant is tested
+- [ ] BP composite group relationship is tested
+- [ ] Norm range consistency (no gaps/overlaps, min <= max) is tested
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `colors.background.primary` equals `#0D0D0D` and `colors.background.surface` equals `#1A1A1A`
-- [ ] Norm indicator colors are correct: `colors.norm.green === '#22C55E'`, `colors.norm.yellow === '#EAB308'`, `colors.norm.red === '#EF4444'`
-- [ ] Heart Score label colors are correct: excellent `#22C55E`, good `#84CC16`, fair `#EAB308`, needsAttention `#F97316`, atRisk `#EF4444`
-- [ ] Text colors are correct: primary `#FFFFFF`, secondary `#A1A1AA`
-- [ ] `ColorsType` is exported and can be used to type a variable without TypeScript error
+
+- [ ] `METRICS` has exactly 12 entries — `Object.keys(METRICS).length` equals 12
+- [ ] Every `MetricType` value has a corresponding key in `METRICS` — iterating all `MetricType` values finds each one present
+- [ ] Heart Score weights of all scored metrics sum to exactly 100 — sum of `heartScoreWeight` across all `METRICS` entries equals 100
+- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) each have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] BP metrics (`bp_systolic`, `bp_diastolic`) both have `bpCompositeGroup` set to a non-null, non-undefined value
 
 ### Edge Cases
-- [ ] Color object is immutable — attempting to assign a new value (e.g. `colors.norm.green = '#000'`) throws in strict mode or leaves the value unchanged (verifies `Object.freeze()`)
-- [ ] All color keys are unique across the entire exported object (no accidental key collision between namespaces)
-- [ ] `as const` assertion is applied — TypeScript infers literal types (e.g. `typeof colors.norm.green` is `'#22C55E'`, not `string`)
+
+- [ ] All non-null `normRanges` satisfy `min <= max` for every `green`, `yellow`, and `red` sub-range
+- [ ] Yellow ranges border green ranges with no gaps and no overlaps — for each metric, `yellow.max === green.min - 1` (or equivalent boundary logic per unit) on the low side and `yellow.min === green.max + 1` on the high side
+- [ ] `METRICS` object is frozen (mutation throws in strict mode), matching the immutability pattern from `colors.ts`
 
 ### Mocking Strategy
-- HealthKit: not applicable — this is a pure constants module
-- Navigation: not applicable
-- Storage: not applicable — import `constants/colors.ts` directly in tests; no mocking required
+
+- HealthKit: not applicable — these are pure constant/type tests with no runtime data fetching
+- Navigation: not applicable — no component rendering or routing involved
+- Storage: not applicable — no DB interaction; tests import directly from `constants/metrics.ts`
+
+---
+
+## Type Tests (`metrics.test-d.ts`)
+
+- [ ] `METRICS['heart_rate']` is assignable to `MetricDefinition` — compile-time assertion passes
+- [ ] The key type of `METRICS` is exactly `MetricType` — no extra keys accepted, no `MetricType` values missing (use `satisfies Record<MetricType, MetricDefinition>` or equivalent mapped-type assertion)
+- [ ] `normRanges` field type is `NormRange | null` — not `NormRange | undefined`, not optional (`?`) — verified via `@ts-expect-error` on an `undefined` assignment
+
+### Pattern Reference
+
+Follow the same structure as `constants/__tests__/colors.test.ts` (grouped `describe` blocks, one assertion per `it`) and `constants/__tests__/colors.test-d.ts` (compile-time-only type aliases, `export {}`).
 
 ---
 _Test cases generated by QA Agent (Claude Code)_

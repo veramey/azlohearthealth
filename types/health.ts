@@ -1,3 +1,25 @@
+export interface NormBand {
+  min: number;
+  max: number;
+}
+
+// Three-zone norm range: green = normal, yellow = borderline, red = significantly outside.
+// Yellow is adjacent to green on one side (low or high depending on the metric).
+export interface NormRange {
+  green: NormBand;
+  yellow: NormBand;
+  red: NormBand;
+}
+
+export interface MetricDefinition {
+  label: string;
+  unit: string;
+  healthKitType: string;
+  normRanges: NormRange | null;
+  heartScoreWeight: number;
+  bpCompositeGroup?: string;
+}
+
 // All 12 tracked metric identifiers (see SPEC.md §3)
 export const METRIC_TYPES = [
   'heart_rate',
