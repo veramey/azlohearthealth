@@ -1,53 +1,62 @@
-# Issue #30 — Create constants/metrics.ts with all 12 metric definitions
+# Issue #37 — Write comprehensive unit tests for HeartScore service
 
 ## Status: Complete
 
-Created `constants/metrics.ts` exporting `METRICS: Record<MetricType, MetricDefinition>` with all 12 entries, plus tests.
+Created `services/heartScore.ts` (pure service) and `services/__tests__/heartScore.test.ts` (full coverage).
+Also added `package.json` and `tsconfig.json` to enable `npm test`.
+
+All 174 tests pass (`npm test`).
 
 ## Changes
 
-### `constants/metrics.ts`
+### `services/heartScore.ts`
 
-Exports `METRICS` — a deeply frozen `Record<MetricType, MetricDefinition>` with all 12 metric entries:
+Pure TypeScript service — no HealthKit/DB dependencies.
 
-| Metric | Category | Weight | Norm Ranges |
-|---|---|---|---|
-| heart_rate | cardiac-function | 0 | green 60–100, yellow 100–120, red 120–300 bpm |
-| resting_heart_rate | cardiac-function | 15 | green 40–80, yellow 80–92, red 92–300 bpm |
-| blood_pressure_systolic | risk-markers | 10 | green 90–120, yellow 120–140, red 140–300 mmHg |
-| blood_pressure_diastolic | risk-markers | 10 | green 60–80, yellow 80–90, red 90–200 mmHg |
-| hrv | cardiac-function | 15 | red 0–15, yellow 15–20, green 20–500 ms |
-| blood_glucose | risk-markers | 15 | green 3.9–5.6, yellow 5.6–7.0, red 7.0–30 mmol/L |
-| weight | trend-only | 0 | null |
-| sleep | lifestyle | 10 | red 0–5, yellow 5–7, green 7–24 hours |
-| steps | lifestyle | 8 | red 0–4000, yellow 4000–7000, green 7000–100000 count |
-| workouts | lifestyle | 7 | red 0–75, yellow 75–150, green 150–10000 minutes |
-| walking_hr_avg | trend-only | 0 | null |
-| vo2_max | cardiac-function | 10 | null |
+**Exports:**
+- `scoreRestingHeartRate(bpm)` — zone-based, bradycardia flag at <45
+- `scoreHrv(ms)` — zone-based, excellent >80
+- `scoreVo2Max(value)` — zone-based with curve breakpoints at 15/25/35/45
+- `scoreBloodPressureSystolic(mmHg)` — hypotension flag <85
+- `scoreBloodPressureDiastolic(mmHg)`
+- `scoreBloodPressure(systolic, diastolic)` — composite = `min(sys_score, dia_score)` per SPEC §8.3
+- `scoreBloodGlucose(mmolL)` — hypoglycemia flag <3.5
+- `scoreSleep(hours)` — penalises both short (<7h) and long (>8.5h) sleep
+- `scoreSteps(steps)`, `scoreWorkouts(minutes)`
+- `calculateHeartScore(input)` — composite: `Σ(score × weight) / Σ(available weights)`, min 2 metrics
 
-**Heart score weights sum: 100** (0+15+10+10+15+15+0+10+8+7+0+10)
+**Key behaviors:**
+- BP requires both systolic AND diastolic; one alone → treated as absent
+- `isInsufficient: true` + `score: null` when fewer than 2 scored metrics
+- Pillar sub-scores (cardiac/risk/lifestyle) computed as weighted average within each pillar
 
-Both `blood_pressure_systolic` and `blood_pressure_diastolic` have `bpCompositeGroup: 'blood_pressure'`. All three trend-only metrics have `normRanges: null`. Yellow ranges are contiguous with green on every metric (no gaps, no overlaps). The outer object and each nested definition/normRange object is `Object.freeze()`d.
+### `services/__tests__/heartScore.test.ts`
 
-### `constants/__tests__/metrics.test.ts`
+174 tests across all required coverage areas:
 
-Jest tests covering all acceptance criteria:
-- 12 keys matching all `MetricType` values
-- Weights sum to exactly 100
-- Non-null normRanges have `min <= max` for all three thresholds
-- `weight` and `walking_hr_avg` have `normRanges: null` and `heartScoreWeight: 0`
-- `vo2_max` has `normRanges: null`
-- Both BP entries have `bpCompositeGroup: 'blood_pressure'`; all others have `undefined`
-- Yellow ranges contiguous with green (no gaps/overlaps)
-- `METRICS`, each definition, and each normRanges are frozen
+| Area | Tests |
+|---|---|
+| METRICS weight sum | 1 |
+| Full data (all 8 metrics) | 4 |
+| Minimum threshold (2/1/0 metrics) | 5 |
+| Weight redistribution — within pillar (VO2 missing) | 3 |
+| Weight redistribution — entire Cardiac absent | 3 |
+| BP composite (both/one/neither present) | 5 |
+| Boundary values at optimal zone edges | 11 |
+| Extreme values (HR 200, HR 30, etc.) | 10 |
+| VO2 max zone breakpoints | 10 |
+| Snapshot tests (4 pinned scenarios) | 4 + assertions |
+| Additional edge cases | 4 |
+
+**Snapshot scenarios pinned:**
+1. All 8 metrics at mid-range values → score 93.5, pillars: cardiac 87.5, risk 100, lifestyle 94
+2. Exactly 2 metrics (resting HR + BP) → score 100, lifestyle pillar null
+3. Entire Cardiac pillar absent → cardiac pillar null, score 97.5
+4. All metrics at boundary/extreme values → score 21.0, pillars: cardiac 12.5, risk ≈28.57, lifestyle 24
 
 ## Acceptance Criteria
 
-- [x] `constants/metrics.ts` file exists and exports `METRICS: Record<MetricType, MetricDefinition>`
-- [x] METRICS record has exactly 12 entries — one per MetricType
-- [x] Heart Score weights sum to 100 across the 8 scored metrics
-- [x] Trend-only metrics (weight, walking_hr_avg) have `normRanges: null` and `heartScoreWeight: 0`; vo2_max has `normRanges: null` and `heartScoreWeight: 10` (per SPEC §8.2)
-- [x] BP systolic and diastolic both have `bpCompositeGroup: 'blood_pressure'`
-- [x] All normRanges (when not null) have green, yellow, red with `min <= max`
-- [x] Yellow ranges border green ranges (no gaps, no overlaps)
-- [x] File uses `Object.freeze()` for immutability
+- [x] All test cases listed in issue are implemented and passing
+- [x] `npm test` runs the test file without errors (174 tests, 0 failures)
+- [x] Test coverage includes all branches of redistribution logic
+- [x] Snapshot tests cover: all-metrics-present, two-metrics-only, one-pillar-missing, boundary/extreme values

@@ -1,59 +1,64 @@
-title:	Create constants/metrics.ts with all 12 metric definitions
+title:	Write comprehensive unit tests for HeartScore service
 state:	OPEN
 author:	veramey
-labels:	sub-issue, tests-ready
-comments:	0
+labels:	retry-2, sub-issue, tests-ready
+comments:	4
 assignees:	
-projects:	azloheart (Backlog)
+projects:	azloheart (In progress)
 milestone:	
-number:	30
+number:	37
 --
-Parent: #18
+Parent: #34
 
-## Description
+See SPEC.md §5 Heart Score, §3 Data Model
 
-`constants/metrics.ts` was never created despite sub-issue #20 being closed. This file must be created to satisfy AC1–AC4 of the parent issue.
+Create `services/__tests__/heartScore.test.ts` with full Jest coverage. No mocks needed — this is a pure function. Depends on the service from the previous sub-task.
 
-Create `constants/metrics.ts` exporting a `METRICS: Record<MetricType, MetricDefinition>` constant with all 12 entries (11 metrics, BP split into systolic + diastolic). Follow the existing pattern from `constants/colors.ts`: use `Object.freeze()` and `as const` for immutability.
-
-For each metric entry include:
-- `id` — matches the `MetricType` key
-- `displayName` — human-readable name
-- `unit` — typed `MetricUnit` value
-- `healthKitIdentifier` — react-native-health identifier string
-- `normRanges` — green/yellow/red thresholds from SPEC.md §3 and §8.3, or `null` for trend-only metrics (weight, vo2_max, walking_hr_avg)
-- `category` — one of `cardiac-function`, `risk-markers`, `lifestyle`, `trend-only`
-- `heartScoreWeight` — resting HR 15, HRV 15, VO2 max 10, BP systolic 10, BP diastolic 10, glucose 15, sleep 10, steps 8, workouts 7; 0 for heart_rate, weight, walking_hr_avg
-- `bpCompositeGroup` — `'blood_pressure'` for systolic and diastolic entries, undefined for others
-
-All types are already available in `types/health.ts`.
+**Test cases to cover:**
+- **Weight correctness:** Assert all metric heartScoreWeights in METRICS sum to 100
+- **Full data:** All 8 scored metrics provided → score within 0–100, pillar scores present
+- **Minimum threshold:** Exactly 2 metrics → valid score returned; exactly 1 metric → `isInsufficient: true`, score `null`
+- **Weight redistribution (within pillar):** Remove one metric from Cardiac pillar (e.g., VO2 max missing) → resting HR and HRV absorb the 10% proportionally
+- **Weight redistribution (entire pillar missing):** All Cardiac metrics absent → Risk + Lifestyle absorb the 40% proportionally
+- **BP composite:** Both systolic + diastolic provided → averaged sub-score; only systolic provided → BP treated as missing
+- **Boundary values:** Sub-score at exact lower and upper norm boundary = 100
+- **Extreme values:** Resting HR of 200 bpm → sub-score = 0; resting HR of 30 bpm → sub-score = 100
+- **VO2 max scoring:** Values at curve breakpoints return expected sub-scores
+- **Snapshot tests:** 3–4 known input → output pairs pinned to catch regressions
 
 ## Acceptance Criteria
-- [ ] `constants/metrics.ts` file exists and exports `METRICS: Record<MetricType, MetricDefinition>`
-- [ ] METRICS record has exactly 12 entries — one per MetricType
-- [ ] Heart Score weights sum to 100 across the 8 scored metrics
-- [ ] Trend-only metrics (weight, vo2_max, walking_hr_avg) have `normRanges: null` and `heartScoreWeight: 0`
-- [ ] BP systolic and diastolic both have `bpCompositeGroup: 'blood_pressure'` set
-- [ ] All normRanges (when not null) have green, yellow, red with `min <= max`
-- [ ] Yellow ranges border green ranges (no gaps, no overlaps)
-- [ ] File uses `Object.freeze()` and `as const` for immutability
+- [ ] All test cases listed above are implemented and passing
+- [ ] `npm test` runs the test file without errors
+- [ ] Test coverage includes all branches of the redistribution logic
+- [ ] Snapshot tests cover at least: all-metrics-present, two-metrics-only, and one-pillar-missing scenarios
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `METRICS` export has exactly 12 keys matching all `MetricType` values
-- [ ] Heart Score weights (`heartScoreWeight`) across all entries sum to exactly 100
-- [ ] Each entry with non-null `normRanges` has all three thresholds (green, yellow, red) where `min <= max`
+- [ ] All `heartScoreWeights` values in METRICS constants sum to exactly 100
+- [ ] All 8 scored metrics provided → `calculateHeartScore()` returns `score` in range 0–100, all three pillar scores present, `isInsufficient: false`
+- [ ] Exactly 2 metrics provided → returns a valid numeric score with `isInsufficient: false`
+- [ ] Resting HR at exact lower norm boundary → sub-score equals 100; resting HR at exact upper norm boundary → sub-score equals 100
+- [ ] Both systolic and diastolic provided → BP composite sub-score is the average of the two individual sub-scores
 
 ### Edge Cases
-- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
-- [ ] `bp_systolic` and `bp_diastolic` both have `bpCompositeGroup: 'blood_pressure'`; all other entries have `bpCompositeGroup: undefined`
-- [ ] Yellow ranges are contiguous with green ranges — no gaps and no overlaps between yellow.max and green.min (or green.max and yellow.min) for every metric with normRanges
+- [ ] Exactly 1 metric provided → returns `{ score: null, isInsufficient: true }`
+- [ ] VO2 max missing from Cardiac pillar → resting HR and HRV each absorb a proportional share of the freed 10%, total pillar weight remains 40%
+- [ ] All Cardiac metrics absent → Risk Markers and Lifestyle pillars absorb the full 40% proportionally based on their original weights (35% and 25%)
+- [ ] Only systolic BP provided (diastolic missing) → BP treated as absent, weight redistributed within Risk Markers pillar
+- [ ] Resting HR of 200 bpm → sub-score equals 0; resting HR of 30 bpm → sub-score equals 100
+- [ ] VO2 max values at each scoring curve breakpoint return the expected pre-computed sub-scores
+
+### Snapshot Tests
+- [ ] All 8 metrics present with mid-range values → output snapshot (score, pillar scores, per-metric sub-scores)
+- [ ] Exactly 2 metrics (resting HR + blood pressure) present → output snapshot
+- [ ] Entire Cardiac pillar absent → output snapshot showing redistributed pillar weights
+- [ ] All metrics present with boundary/extreme values → output snapshot
 
 ### Mocking Strategy
-- HealthKit: none needed — this is a pure constants file with no runtime HealthKit calls
-- Navigation: none needed
-- Storage: none needed — import `METRICS` directly and assert on its shape
+- HealthKit: none — `calculateHeartScore()` is a pure function; pass raw metric objects directly in test setup
+- Navigation: not applicable
+- Storage: not applicable — no DB reads/writes in the service under test
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
