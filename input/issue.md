@@ -1,4 +1,4 @@
-title:	Add runtime and compile-time tests for constants/theme.ts
+title:	Add unit tests and type tests for constants/metrics.ts
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
@@ -6,67 +6,71 @@ comments:	0
 assignees:	
 projects:	azloheart (Backlog)
 milestone:	
-number:	27
+number:	31
 --
-Parent: #25
+Parent: #18
 
-See SPEC.md §7.2 (Visual Direction)
+## Description
 
-Depends on: `constants/theme.ts` from previous sub-task.
+Test files for `constants/metrics.ts` were never created despite sub-issue #21 being closed. Create them once #30 (constants/metrics.ts) is merged.
 
-Create two test files following the pattern established by `constants/__tests__/colors.test.ts` and `constants/__tests__/colors.test-d.ts`.
+**Unit tests (`constants/__tests__/metrics.test.ts`):**
+- `METRICS` has exactly 12 entries (one per `MetricType`)
+- Every `MetricType` value has a corresponding entry in `METRICS`
+- Heart Score weights of scored metrics sum to exactly 100
+- Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
+- BP systolic and diastolic both have `bpCompositeGroup` set
+- All non-null `normRanges` have green, yellow, red with `min <= max`
+- Yellow ranges border green ranges (no gaps, no overlaps)
+- `METRICS` object is frozen (mutation throws in strict mode)
 
-### Runtime tests (`constants/__tests__/theme.test.ts`)
-- All Typography values match expected: fontFamily='System', sizes (34/28/22/16/14/12), lineHeights (46/38/30/22/20/16), weights ('400'/'500'/'600'/'700')
-- All Spacing values match expected: xs=4, sm=8, md=12, lg=16, xl=24, 2xl=32, 3xl=48, 4xl=64
-- All BorderRadius values match expected: small=8, medium=12, large=16
-- `Object.isFrozen()` assertions on all exported objects AND all nested objects
-- Mutation throws in strict mode (matching colors.test.ts pattern)
-- Spacing values are strictly ascending (each value > previous)
-- Every line height is greater than its corresponding font size
-- Font weights are valid React Native fontWeight strings
-- `MIN_TAP_TARGET` equals 44
-- No duplicate keys within groups
+**Type tests (`constants/__tests__/metrics.test-d.ts`):**
+- `METRICS['heart_rate']` is assignable to `MetricDefinition`
+- Key type of `METRICS` is exactly `MetricType`
+- `normRanges` field type is `NormRange | null` (not undefined, not optional)
 
-### Compile-time type tests (`constants/__tests__/theme.test-d.ts`)
-- Literal type preservation: `Typography.sizes.body` is type `16` not `number`
-- `Spacing.md` is type `12` not `number`
-- `BorderRadius.medium` is type `12` not `number`
-- `@ts-expect-error` for assigning wrong literal values to verify const narrowing
+Follow the existing pattern from `constants/__tests__/colors.test.ts` and `constants/__tests__/colors.test-d.ts`.
 
 ## Acceptance Criteria
-- [ ] `constants/__tests__/theme.test.ts` exists with runtime Jest tests covering all token values, immutability, scale progression, and line height invariants
-- [ ] `constants/__tests__/theme.test-d.ts` exists with compile-time type tests verifying literal type preservation via `@ts-expect-error`
-- [ ] All tests pass with `npm test`
-- [ ] Test structure follows the same describe/it pattern as `colors.test.ts`
+- [ ] Unit test file exists at `constants/__tests__/metrics.test.ts`
+- [ ] Type test file exists at `constants/__tests__/metrics.test-d.ts`
+- [ ] All unit tests pass with `npm test`
+- [ ] Type tests validate at compile time with `tsc --noEmit`
+- [ ] Heart Score weight sum invariant is tested
+- [ ] BP composite group relationship is tested
+- [ ] Norm range consistency (no gaps/overlaps, min <= max) is tested
+
+## Depends On
+- #30 (constants/metrics.ts must exist first)
 
 ## Test Cases
 
 ### Happy Path
 
-- [ ] `Typography` values match expected: `fontFamily` is `'System'`, sizes are `{ largeTitle: 34, title: 28, title2: 22, body: 16, subheadline: 14, caption: 12 }`, lineHeights are `{ largeTitle: 46, title: 38, title2: 30, body: 22, subheadline: 20, caption: 16 }`, weights are `{ regular: '400', medium: '500', semibold: '600', bold: '700' }`
-- [ ] `Spacing` values match expected: `{ xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32, '3xl': 48, '4xl': 64 }`
-- [ ] `BorderRadius` values match expected: `{ small: 8, medium: 12, large: 16 }`
-- [ ] `MIN_TAP_TARGET` equals `44`
-- [ ] All exported objects and their nested objects are frozen (`Object.isFrozen()` returns `true` for `Typography`, `Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
+- [ ] `METRICS` has exactly 12 entries — `Object.keys(METRICS).length` equals 12
+- [ ] Every `MetricType` value from `METRIC_TYPES` has a corresponding key in `METRICS` with a matching `id` field
+- [ ] Heart Score weights of all scored metrics (non-zero `heartScoreWeight`) sum to exactly 100
+- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] BP systolic and BP diastolic both have `bpCompositeGroup` set to a non-empty string (and the same value)
+- [ ] All non-null `normRanges` entries have `min <= max` for green, yellow, and red sub-ranges
+- [ ] Yellow ranges border green ranges — yellow.max equals green.min or yellow.min equals green.max with no gap or overlap
 
 ### Edge Cases
 
-- [ ] Mutation of a frozen nested object (e.g. `Typography.sizes.body = 99`) throws a `TypeError` in strict mode, matching the `colors.test.ts` pattern
-- [ ] Spacing values are strictly ascending: each value in `[xs, sm, md, lg, xl, '2xl', '3xl', '4xl']` is greater than the previous
-- [ ] Every `Typography.lineHeight` is strictly greater than its corresponding `Typography.sizes` value (e.g. `lineHeights.body (22) > sizes.body (16)`)
-- [ ] Each `Typography.weights` value is a valid React Native `fontWeight` string (one of `'100'`–`'900'`, `'normal'`, `'bold'`)
-- [ ] No duplicate keys within each group (`Typography.sizes`, `Typography.lineHeights`, `Typography.weights`, `Spacing`, `BorderRadius`)
+- [ ] `METRICS` object is frozen — attempting `METRICS['heart_rate'].displayName = 'x'` throws in strict mode (`Object.isFrozen`)
+- [ ] Metrics with `normRanges !== null` have a positive `heartScoreWeight` (no scored metric lacks norm ranges)
+
+### Type Tests (`metrics.test-d.ts`)
+
+- [ ] `METRICS['heart_rate']` is assignable to `MetricDefinition`
+- [ ] The key type of `METRICS` is exactly `MetricType` (not `string`)
+- [ ] `normRanges` field type is `NormRange | null` — not `undefined`, not optional (`NormRange | undefined`)
 
 ### Mocking Strategy
 
-- HealthKit: not applicable — this is a constants-only module with no HealthKit dependency
-- Navigation: not applicable — no expo-router usage
-- Storage: not applicable — no local DB usage; import `constants/theme` directly in tests
-
----
-
-> Note: the compile-time test file (`theme.test-d.ts`) requires no runtime mocking. It relies solely on TypeScript's `tsc --noEmit` to verify that `as const` preserves literal types (`Typography.sizes.body` is `16`, not `number`; `Spacing.md` is `12`, not `number`; `BorderRadius.medium` is `12`, not `number`) and that `@ts-expect-error` correctly rejects wrong literal assignments.
+- **HealthKit:** none required — `constants/metrics.ts` is a pure data module with no HealthKit calls
+- **Navigation:** not required
+- **Storage:** not required — tests import the frozen constant directly
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
