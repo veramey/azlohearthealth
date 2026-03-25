@@ -1,4 +1,4 @@
-title:	Verify constants/colors.ts matches SPEC.md and ensure test coverage
+title:	Extend types/health.ts with MetricDefinition and related types
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
@@ -6,54 +6,60 @@ comments:	0
 assignees:	
 projects:	azloheart (In Development)
 milestone:	
-number:	16
+number:	19
 --
-Parent: #15
+Parent: #18
 
-See SPEC.md §7.2 Visual Direction, §8.5 Score Display
+See SPEC.md §3 (Data Model), §8.2 (Heart Score Architecture)
 
-The `constants/colors.ts` file already exists with the full color palette, and `constants/__tests__/colors.test.ts` already covers all color values, shared base values, immutability, and key uniqueness. This sub-task verifies correctness against the spec and ensures all tests pass.
+Extend the existing `types/health.ts` file with the types needed by `constants/metrics.ts`:
 
-### What to verify
-- All hex values in `constants/colors.ts` match SPEC.md §7.2 and §8.5 exactly
-- Background: primary (#0D0D0D), surface (#1A1A1A)
-- Norm indicators: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- Heart Score labels: excellent (#22C55E), good (#84CC16), fair (#EAB308), needsAttention (#F97316), atRisk (#EF4444)
-- Text: primary (#FFFFFF), secondary (#A1A1AA)
-- `ColorsType` is exported for downstream component usage
-- `as const` + `Object.freeze()` pattern is applied consistently
-- All existing tests in `constants/__tests__/colors.test.ts` pass via `npm test`
+- `MetricUnit` — string union: `'bpm' | 'mmHg' | 'ms' | 'mmol/L' | 'kg' | 'hours' | 'count' | 'minutes' | 'mL/kg/min'`
+- `MetricCategory` — string union: `'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only'`
+- `NormRange` — object with `green`, `yellow`, `red` sub-objects each containing `{ min: number; max: number }`
+- `HeartScoreConfig` — object with `weight: number` (0–100) and optional `bpCompositeGroup?: string`
+- `MetricDefinition` — full metric entry: `id: MetricType`, `displayName: string`, `unit: MetricUnit`, `healthKitIdentifier: string`, `normRanges: NormRange | null`, `category: MetricCategory`, `heartScoreWeight: number`, `bpCompositeGroup?: string`
 
-### If any discrepancy is found
-- Fix the hex value in `constants/colors.ts` to match the spec
-- Update the corresponding test assertion
+Keep all existing types (`MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading`) unchanged.
 
 ## Acceptance Criteria
-- [ ] File exists at `constants/colors.ts` and exports a typed color palette object
-- [ ] Background colors included: primary (#0D0D0D) and surface (#1A1A1A)
-- [ ] Norm indicator colors included: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- [ ] Heart Score label colors included: Excellent green (#22C55E), Good light-green (#84CC16), Fair yellow (#EAB308), Needs Attention orange (#F97316), At Risk red (#EF4444)
-- [ ] Text colors included: primary (white/light), secondary (light gray for labels)
-- [ ] All unit tests pass (`npm test -- constants/__tests__/colors.test.ts`)
+- [ ] `MetricUnit` string union type exported with all 9 unit values
+- [ ] `MetricCategory` string union type exported with 4 categories
+- [ ] `NormRange` interface exported with green/yellow/red threshold objects (each has min/max)
+- [ ] `MetricDefinition` interface exported with all required fields: id, displayName, unit, healthKitIdentifier, normRanges (NormRange | null), category, heartScoreWeight, bpCompositeGroup
+- [ ] All existing types remain unchanged and exported
+- [ ] Strict TypeScript — no `any`, no implicit types
 
 ## Test Cases
 
+> Issue #19 — Extend `types/health.ts` with `MetricDefinition` and related types
+
+These are TypeScript compilation / type-level tests. Because this issue adds only type declarations (no runtime logic), tests are authored as `tsc`-checked type assertions using `expectType` helpers (e.g. `ts-expect-error` directives and assignability checks). They run via `tsc --noEmit` in CI.
+
 ### Happy Path
-- [ ] `colors.background.primary` equals `#0D0D0D` and `colors.background.surface` equals `#1A1A1A`
-- [ ] Norm indicator colors are correct: `colors.norm.green === '#22C55E'`, `colors.norm.yellow === '#EAB308'`, `colors.norm.red === '#EF4444'`
-- [ ] Heart Score label colors are correct: excellent `#22C55E`, good `#84CC16`, fair `#EAB308`, needsAttention `#F97316`, atRisk `#EF4444`
-- [ ] Text colors are correct: primary `#FFFFFF`, secondary `#A1A1AA`
-- [ ] `ColorsType` is exported and can be used to type a variable without TypeScript error
+
+- [ ] `MetricUnit` accepts all 9 valid string literals — assign each value (`'bpm'`, `'mmHg'`, `'ms'`, `'mmol/L'`, `'kg'`, `'hours'`, `'count'`, `'minutes'`, `'mL/kg/min'`) to a `MetricUnit` variable without compiler error
+- [ ] `MetricCategory` accepts all 4 valid string literals — assign `'cardiac-function'`, `'risk-markers'`, `'lifestyle'`, `'trend-only'` to a `MetricCategory` variable without compiler error
+- [ ] A fully-populated `MetricDefinition` object compiles — construct an object with all required fields (`id`, `displayName`, `unit`, `healthKitIdentifier`, `normRanges`, `category`, `heartScoreWeight`) and optional `bpCompositeGroup`; expect no `tsc` errors
+- [ ] `normRanges: null` is valid — a `MetricDefinition` with `normRanges: null` (trend-only metric like weight) compiles without error
+- [ ] `NormRange` shape is valid — construct `{ green: { min: 60, max: 100 }, yellow: { min: 50, max: 110 }, red: { min: 0, max: 300 } }` and assign to `NormRange` without error
 
 ### Edge Cases
-- [ ] Color object is immutable — attempting to assign a new value (e.g. `colors.norm.green = '#000'`) throws in strict mode or leaves the value unchanged (verifies `Object.freeze()`)
-- [ ] All color keys are unique across the entire exported object (no accidental key collision between namespaces)
-- [ ] `as const` assertion is applied — TypeScript infers literal types (e.g. `typeof colors.norm.green` is `'#22C55E'`, not `string`)
+
+- [ ] `MetricUnit` rejects unknown units — `'lbs'` assigned to `MetricUnit` produces a `@ts-expect-error` compiler diagnostic (type guard: only the 9 specified values are valid)
+- [ ] `MetricCategory` rejects unknown categories — `'unknown-category'` assigned to `MetricCategory` produces a `@ts-expect-error` diagnostic
+- [ ] `MetricDefinition` with missing required field fails — omitting `heartScoreWeight` from a `MetricDefinition` object produces a `@ts-expect-error` diagnostic
+- [ ] Existing types are unchanged — `MetricType`, `NormStatus`, `ReadingSource`, `MetricReading`, `BloodPressureReading` are still exported; constructing valid instances of each compiles without error (regression guard)
 
 ### Mocking Strategy
-- HealthKit: not applicable — this is a pure constants module
-- Navigation: not applicable
-- Storage: not applicable — import `constants/colors.ts` directly in tests; no mocking required
+
+- **HealthKit:** Not applicable — this issue is pure type declarations; no runtime HealthKit calls involved
+- **Navigation:** Not applicable — no components or screens are modified
+- **Storage:** Not applicable — no DB schema changes in this issue
+
+### Notes
+
+All tests live in `types/__tests__/health.test-d.ts` (type-only test file, `.test-d.ts` convention). Run as part of `npm test` via `tsc --noEmit` (already configured in `bug-check.yml`). No Jest runtime assertions needed — type-level correctness is the only acceptance criterion.
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
