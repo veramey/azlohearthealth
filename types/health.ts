@@ -21,6 +21,32 @@ export type NormStatus = 'green' | 'yellow' | 'red' | 'none';
 
 export type ReadingSource = 'healthkit' | 'manual';
 
+export type MetricUnit = 'bpm' | 'mmHg' | 'ms' | 'mg/dL' | 'kg' | 'h' | 'steps' | 'min' | 'mL/kg/min';
+
+export type MetricCategory = 'cardiac-function' | 'risk-markers' | 'lifestyle' | 'trend-only';
+
+export interface NormRange {
+  min: number;
+  max: number;
+}
+
+export interface NormRanges {
+  green: NormRange;
+  yellow: NormRange;
+  red: NormRange;
+}
+
+export interface MetricDefinition {
+  id: MetricType;
+  displayName: string;
+  unit: MetricUnit;
+  healthKitIdentifier: string;
+  normRanges: NormRanges | null;
+  category: MetricCategory;
+  heartScoreWeight: number;
+  bpCompositeGroup?: 'blood_pressure';
+}
+
 export interface MetricReading {
   type: MetricType;
   value: number;

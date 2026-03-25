@@ -1,59 +1,60 @@
-title:	Verify constants/colors.ts matches SPEC.md and ensure test coverage
+title:	Create constants/metrics.ts with all 12 metric definitions
 state:	OPEN
 author:	veramey
-labels:	sub-issue, tests-ready
-comments:	0
+labels:	retry-2, sub-issue, tests-ready
+comments:	4
 assignees:	
 projects:	azloheart (In Development)
 milestone:	
-number:	16
+number:	20
 --
-Parent: #15
+Parent: #18
 
-See SPEC.md §7.2 Visual Direction, §8.5 Score Display
+See SPEC.md §3 (Data Model), §3 (Norm Indicator Logic), §8.2 (Heart Score Architecture), §8.3 (Per-Metric Scoring)
 
-The `constants/colors.ts` file already exists with the full color palette, and `constants/__tests__/colors.test.ts` already covers all color values, shared base values, immutability, and key uniqueness. This sub-task verifies correctness against the spec and ensures all tests pass.
+Create `constants/metrics.ts` exporting a `METRICS: Record<MetricType, MetricDefinition>` constant with all 12 entries (11 metrics, BP split into systolic + diastolic). Follow the existing pattern from `constants/colors.ts`: use `Object.freeze()` and `as const` for immutability.
 
-### What to verify
-- All hex values in `constants/colors.ts` match SPEC.md §7.2 and §8.5 exactly
-- Background: primary (#0D0D0D), surface (#1A1A1A)
-- Norm indicators: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- Heart Score labels: excellent (#22C55E), good (#84CC16), fair (#EAB308), needsAttention (#F97316), atRisk (#EF4444)
-- Text: primary (#FFFFFF), secondary (#A1A1AA)
-- `ColorsType` is exported for downstream component usage
-- `as const` + `Object.freeze()` pattern is applied consistently
-- All existing tests in `constants/__tests__/colors.test.ts` pass via `npm test`
+For each metric entry include:
+- `id` — matches the `MetricType` key
+- `displayName` — human-readable name
+- `unit` — typed `MetricUnit` value
+- `healthKitIdentifier` — react-native-health identifier string (e.g., `'HeartRate'`, `'RestingHeartRate'`, `'BloodPressureSystolic'`, `'HeartRateVariabilitySDNN'`, etc.)
+- `normRanges` — green/yellow/red thresholds from SPEC.md §3 and §8.3, or `null` for trend-only metrics
+- `category` — one of `cardiac-function`, `risk-markers`, `lifestyle`, `trend-only`
+- `heartScoreWeight` — per SPEC.md §8.2 weights (resting HR 15, HRV 15, VO2 max 10, BP systolic 10, BP diastolic 10, glucose 15, sleep 10, steps 8, workouts 7; 0 for heart_rate, weight, walking_hr_avg)
+- `bpCompositeGroup` — `'blood_pressure'` for systolic and diastolic entries, undefined for others
 
-### If any discrepancy is found
-- Fix the hex value in `constants/colors.ts` to match the spec
-- Update the corresponding test assertion
+Depends on: types from `types/health.ts` (sub-task 1).
 
 ## Acceptance Criteria
-- [ ] File exists at `constants/colors.ts` and exports a typed color palette object
-- [ ] Background colors included: primary (#0D0D0D) and surface (#1A1A1A)
-- [ ] Norm indicator colors included: green (#22C55E), yellow (#EAB308), red (#EF4444)
-- [ ] Heart Score label colors included: Excellent green (#22C55E), Good light-green (#84CC16), Fair yellow (#EAB308), Needs Attention orange (#F97316), At Risk red (#EF4444)
-- [ ] Text colors included: primary (white/light), secondary (light gray for labels)
-- [ ] All unit tests pass (`npm test -- constants/__tests__/colors.test.ts`)
+- [ ] `METRICS` record has exactly 12 entries — one per `MetricType`
+- [ ] Every `MetricType` value has a corresponding entry in `METRICS`
+- [ ] Heart Score weights sum to 100 across the 8 scored metrics
+- [ ] Trend-only metrics (weight, vo2_max, walking_hr_avg) have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] BP systolic and diastolic both have `bpCompositeGroup: 'blood_pressure'` set
+- [ ] All `normRanges` (when not null) have green, yellow, red with `min <= max`
+- [ ] Yellow ranges border green ranges (no gaps, no overlaps)
+- [ ] HealthKit identifiers match react-native-health constants
+- [ ] File uses `Object.freeze()` and `as const` for immutability
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `colors.background.primary` equals `#0D0D0D` and `colors.background.surface` equals `#1A1A1A`
-- [ ] Norm indicator colors are correct: `colors.norm.green === '#22C55E'`, `colors.norm.yellow === '#EAB308'`, `colors.norm.red === '#EF4444'`
-- [ ] Heart Score label colors are correct: excellent `#22C55E`, good `#84CC16`, fair `#EAB308`, needsAttention `#F97316`, atRisk `#EF4444`
-- [ ] Text colors are correct: primary `#FFFFFF`, secondary `#A1A1AA`
-- [ ] `ColorsType` is exported and can be used to type a variable without TypeScript error
+- [ ] `METRICS` exports exactly 12 entries — one for each `MetricType` key (heart_rate, resting_heart_rate, bp_systolic, bp_diastolic, hrv, blood_glucose, weight, sleep, steps, workouts, walking_hr_avg, vo2_max)
+- [ ] Heart Score weights for the 8 scored metrics (resting_hr 15, hrv 15, vo2_max 10, bp_systolic 10, bp_diastolic 10, blood_glucose 15, sleep 10, steps 8, workouts 7) sum to exactly 100
+- [ ] Every metric entry with `normRanges !== null` has `green.min <= green.max`, `yellow.min <= yellow.max`, `red.min <= red.max`
 
 ### Edge Cases
-- [ ] Color object is immutable — attempting to assign a new value (e.g. `colors.norm.green = '#000'`) throws in strict mode or leaves the value unchanged (verifies `Object.freeze()`)
-- [ ] All color keys are unique across the entire exported object (no accidental key collision between namespaces)
-- [ ] `as const` assertion is applied — TypeScript infers literal types (e.g. `typeof colors.norm.green` is `'#22C55E'`, not `string`)
+- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
+- [ ] `bp_systolic` and `bp_diastolic` both have `bpCompositeGroup: 'blood_pressure'`; all other metrics have `bpCompositeGroup` undefined
+- [ ] Yellow norm ranges directly border green ranges with no gaps and no overlaps (yellow.max === green.min - 1 or similar boundary, depending on range design)
+- [ ] `Object.freeze()` is applied — mutating a property on `METRICS` at runtime throws in strict mode or silently fails (value unchanged)
 
 ### Mocking Strategy
-- HealthKit: not applicable — this is a pure constants module
-- Navigation: not applicable
-- Storage: not applicable — import `constants/colors.ts` directly in tests; no mocking required
+- HealthKit: not required — this is a pure constants file with no runtime HealthKit calls
+- Navigation: not required
+- Storage: not required
+- Types: import `MetricType` and `MetricDefinition` from `types/health.ts` directly in tests to assert structural correctness
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
