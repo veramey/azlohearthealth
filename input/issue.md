@@ -1,59 +1,61 @@
-title:	Create constants/metrics.ts with all 12 metric definitions
+title:	Implement calculateHeartScore() service with weight redistribution
 state:	OPEN
 author:	veramey
 labels:	sub-issue, tests-ready
 comments:	0
 assignees:	
-projects:	azloheart (Backlog)
+projects:	azloheart (In progress)
 milestone:	
-number:	30
+number:	36
 --
-Parent: #18
+Parent: #34
 
-## Description
+See SPEC.md §5 Heart Score, §3 Data Model
 
-`constants/metrics.ts` was never created despite sub-issue #20 being closed. This file must be created to satisfy AC1–AC4 of the parent issue.
+Implement the core `services/heartScore.ts` calculation service. Depends on types and constants from the previous sub-task.
 
-Create `constants/metrics.ts` exporting a `METRICS: Record<MetricType, MetricDefinition>` constant with all 12 entries (11 metrics, BP split into systolic + diastolic). Follow the existing pattern from `constants/colors.ts`: use `Object.freeze()` and `as const` for immutability.
+**Pillar weights:** Cardiac Function 40% (resting HR 15%, HRV 15%, VO2 max 10%), Risk Markers 35% (blood pressure 20%, blood glucose 15%), Lifestyle 25% (sleep 10%, steps 8%, workouts 7%).
 
-For each metric entry include:
-- `id` — matches the `MetricType` key
-- `displayName` — human-readable name
-- `unit` — typed `MetricUnit` value
-- `healthKitIdentifier` — react-native-health identifier string
-- `normRanges` — green/yellow/red thresholds from SPEC.md §3 and §8.3, or `null` for trend-only metrics (weight, vo2_max, walking_hr_avg)
-- `category` — one of `cardiac-function`, `risk-markers`, `lifestyle`, `trend-only`
-- `heartScoreWeight` — resting HR 15, HRV 15, VO2 max 10, BP systolic 10, BP diastolic 10, glucose 15, sleep 10, steps 8, workouts 7; 0 for heart_rate, weight, walking_hr_avg
-- `bpCompositeGroup` — `'blood_pressure'` for systolic and diastolic entries, undefined for others
-
-All types are already available in `types/health.ts`.
+**Key implementation details:**
+- Generic `normalizeToScore(value, normRange, direction: 'higher' | 'lower')` function — clamps to 0–100, uses norm ranges from `constants/metrics.ts`
+- BP composite: average systolic and diastolic sub-scores into one 20%-weight metric; if only one is present, treat BP as missing
+- VO2 max: use `constants/heartScoreRanges.ts` curve instead of norm-based normalization
+- Weight redistribution: missing metrics give their weight to other metrics in the same pillar proportionally; if an entire pillar is missing, redistribute to remaining pillars proportionally
+- Return `null` score with `isInsufficient: true` when fewer than 2 metrics have data
+- Document in JSDoc that the caller is responsible for passing only 7-day averages excluding readings older than 30 days (stale filtering is NOT done here)
+- Use `heartScoreWeight` field from `constants/metrics.ts` as the single source of truth for weights — do not hardcode weight values
 
 ## Acceptance Criteria
-- [ ] `constants/metrics.ts` file exists and exports `METRICS: Record<MetricType, MetricDefinition>`
-- [ ] METRICS record has exactly 12 entries — one per MetricType
-- [ ] Heart Score weights sum to 100 across the 8 scored metrics
-- [ ] Trend-only metrics (weight, vo2_max, walking_hr_avg) have `normRanges: null` and `heartScoreWeight: 0`
-- [ ] BP systolic and diastolic both have `bpCompositeGroup: 'blood_pressure'` set
-- [ ] All normRanges (when not null) have green, yellow, red with `min <= max`
-- [ ] Yellow ranges border green ranges (no gaps, no overlaps)
-- [ ] File uses `Object.freeze()` and `as const` for immutability
+- [ ] `calculateHeartScore(input: HeartScoreInput): HeartScoreResult` exported from `services/heartScore.ts`
+- [ ] Three-pillar weighted calculation matches the weights in SPEC.md §5 (Cardiac 40%, Risk 35%, Lifestyle 25%)
+- [ ] Missing metrics redistribute weight proportionally within the same pillar first, then across pillars
+- [ ] BP treated as missing if either systolic or diastolic is absent
+- [ ] VO2 max scored via relative curve, not norm ranges
+- [ ] Returns `{ score: null, isInsufficient: true }` when fewer than 2 metrics provided
+- [ ] Sub-scores clamped to 0–100 for values outside norm boundaries
+- [ ] Inverted metrics (resting HR, BP) score highest when in healthy range (lower values → higher score)
 
 ## Test Cases
 
 ### Happy Path
-- [ ] `METRICS` export has exactly 12 keys matching all `MetricType` values
-- [ ] Heart Score weights (`heartScoreWeight`) across all entries sum to exactly 100
-- [ ] Each entry with non-null `normRanges` has all three thresholds (green, yellow, red) where `min <= max`
+- [ ] `calculateHeartScore` returns a score between 0–100 when all 11 metrics are provided with valid 7-day averages
+- [ ] Three-pillar weights are correct: Cardiac Function contributes 40%, Risk Markers 35%, Lifestyle 25% to the total score (verify by providing only one pillar at a time and asserting proportional output)
+- [ ] BP composite score is correctly averaged from systolic and diastolic sub-scores, contributing 20% weight total
 
 ### Edge Cases
-- [ ] Trend-only metrics (`weight`, `vo2_max`, `walking_hr_avg`) have `normRanges: null` and `heartScoreWeight: 0`
-- [ ] `bp_systolic` and `bp_diastolic` both have `bpCompositeGroup: 'blood_pressure'`; all other entries have `bpCompositeGroup: undefined`
-- [ ] Yellow ranges are contiguous with green ranges — no gaps and no overlaps between yellow.max and green.min (or green.max and yellow.min) for every metric with normRanges
+- [ ] Returns `{ score: null, isInsufficient: true }` when only 1 metric is provided
+- [ ] Returns `{ score: null, isInsufficient: true }` when input is empty (`{}`)
+- [ ] Missing metric redistributes its weight proportionally to other metrics in the same pillar (e.g., HRV missing → resting HR and VO2 max absorb its 15% within Cardiac Function)
+- [ ] Entire Cardiac Function pillar missing → its 40% redistributes proportionally to Risk Markers and Lifestyle pillars
+- [ ] BP treated as missing when only systolic is present (diastolic absent), weight redistributed within Risk Markers pillar
+- [ ] Sub-scores clamp to 100 for values far below norms on inverted metrics (e.g., resting HR of 10 bpm → score 100, not above 100)
+- [ ] Sub-scores clamp to 0 for values far above norms on inverted metrics (e.g., resting HR of 300 bpm → score 0)
 
 ### Mocking Strategy
-- HealthKit: none needed — this is a pure constants file with no runtime HealthKit calls
-- Navigation: none needed
-- Storage: none needed — import `METRICS` directly and assert on its shape
+- **HealthKit:** Not applicable — `services/heartScore.ts` is a pure calculation function; no HealthKit calls
+- **Constants:** Import real `constants/metrics.ts` and `constants/heartScoreRanges.ts` in tests — do not mock, since the AC requires using `heartScoreWeight` as the single source of truth
+- **Navigation:** Not applicable — service layer only
+- **Storage:** Not applicable — service layer only; caller is responsible for passing pre-filtered 7-day averages
 
 ---
 _Test cases generated by QA Agent (Claude Code)_
